@@ -75,3 +75,9 @@ GET /health is a plain health check.
 ## Before production
 
 Move the chat memory database off temporary storage, or replace SqliteSaver with a Postgres-backed checkpointer if traffic grows. Periodically clean up abandoned carts. Add IP-level rate limiting on /chat in addition to the per-user message cap. Keep the Supabase service key on the server only — never expose it to the frontend.
+
+
+
+
+
+
