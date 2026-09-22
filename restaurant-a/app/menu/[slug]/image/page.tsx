@@ -1,21 +1,22 @@
-// app/menu/[slug]/image/page.tsx
 import ShowImageClient from "../../components/ShowImageClient";
-import { fetchMealBySlug } from "@/lib/mealService";
-
+import { supabase } from "@/lib/supabase";
 type ShowImageServerProps = {
-  params: { slug: string };
+  params: Promise<{ slug: string }>; 
 };
 
 export default async function ShowImageServer({ params }: ShowImageServerProps) {
-  const { slug } = params;
+  const { slug } = await params;
 
-  const meal = await fetchMealBySlug(slug);
+  const { data: meal, error } = await supabase
+    .from("meals")
+    .select("*")
+    .eq("slug", slug)
+    .single(); 
 
-  if (!meal) {
-    console.error("Meal not found for slug:", slug);
+  if (error || !meal) {
+    console.error("Meal not found for slug:", slug, error?.message);
     return null;
   }
 
-  // فقط داده را به Client Component می‌دهیم
   return <ShowImageClient item={meal} />;
 }
