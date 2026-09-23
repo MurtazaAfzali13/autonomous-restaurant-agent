@@ -4,9 +4,6 @@ from app.config import SUPABASE_URL, SUPABASE_SERVICE_KEY, MAX_MESSAGES_PER_DAY
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-# ---------------------------------------------------------------------------
-# Meals / Menu
-# ---------------------------------------------------------------------------
 
 def search_meals(category: str | None = None, search_term: str | None = None) -> list[dict]:
     query = supabase.table("meals").select("id, title, summary, price, category, image")
@@ -171,17 +168,6 @@ def cancel_order(order_id: int) -> tuple[bool, str]:
         return False, "این سفارش قبلاً لغو شده است."
     return False, f"وضعیت سفارش نامشخص است: {status}"
 
-
-# ---------------------------------------------------------------------------
-# Conversation / message-limit — سقف ۱۰ پیام در روز، جدا برای هر کاربر
-#
-# جداسازی کاربران: thread_id همیشه برابر str(user_id) است (در routers/chat.py ساخته می‌شود)
-# و conversations.thread_id کلید اصلی جدول است — پس هر کاربر دقیقاً یک ردیف مخصوص خودش
-# دارد و هرگز شمارنده یا حافظه‌اش با کاربر دیگر قاطی نمی‌شود. LangGraph هم با همین
-# thread_id تاریخچه‌ی چت را جدا نگه می‌دارد (chat_memory.db)، و سبد خرید هم بر اساس همین
-# user_id از هم جدا است (get_or_create_active_cart). یعنی سه isolation مستقل — پیام‌شمار
-# روزانه، حافظه‌ی گفتگو، و سبد خرید — همه کلیدشان user_id/thread_id است.
-# ---------------------------------------------------------------------------
 
 def _today() -> str:
     return date.today().isoformat()
