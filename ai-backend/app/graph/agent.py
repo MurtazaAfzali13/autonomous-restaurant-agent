@@ -4,20 +4,17 @@ from app.config import CHAT_MODEL, OPENROUTER_API_KEY, OPENROUTER_BASE_URL
 from app.graph.state import AgentState
 from app.graph.tools import TOOLS
 from app import db
-
-# langchain-openai کاملاً با OpenRouter سازگار است، فقط base_url و api_key عوض می‌شود.
-# پارامترهای extra_headers اختیاری‌اند ولی OpenRouter برای رتبه‌بندی/آمار پیشنهاد می‌کند.
 llm = ChatOpenAI(
     model=CHAT_MODEL,
     api_key=OPENROUTER_API_KEY,
     base_url=OPENROUTER_BASE_URL,
     temperature=0.2,
     default_headers={
-        "HTTP-Referer": "https://your-restaurant-app.example",  # اختیاری، آدرس سایت خودتان
-        "X-Title": "Restaurant AI Backend",
+        "HTTP-Referer": "https://your-restaurant-app.example", 
     },
 )
-llm_with_tools = llm.bind_tools(TOOLS)
+llm_with_tools = llm.bind_tools(TOOLS, parallel_tool_calls=False)
+
 
 SYSTEM_PROMPT = """شما دستیار سفارش‌گیری رستوران هستید. دقیق و کوتاه پاسخ بده.
 

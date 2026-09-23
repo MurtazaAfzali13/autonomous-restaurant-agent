@@ -48,11 +48,12 @@ export function ChatModal({ open, onClose, session }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-start p-0 sm:items-center sm:justify-center sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:pointer-events-none sm:items-end sm:justify-end sm:p-6">
+      {/* موبایل: پس‌زمینه‌ی تیره برای حس bottom-sheet | دسکتاپ: کاملاً شفاف تا بقیه‌ی صفحه دیده شود */}
       <button
         aria-label="بستن چت"
         onClick={onClose}
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm pointer-events-auto sm:bg-transparent sm:backdrop-blur-none sm:pointer-events-none"
       />
 
       <div
@@ -60,7 +61,8 @@ export function ChatModal({ open, onClose, session }: Props) {
         className={`
           relative z-10 flex h-[88vh] w-full flex-col overflow-hidden
           rounded-t-3xl border border-white/10 bg-[#0b0b16] shadow-2xl shadow-black/60
-          sm:h-[660px] sm:max-w-sm sm:rounded-3xl
+          pointer-events-auto
+          sm:h-[640px] sm:w-96 sm:rounded-3xl sm:border
           transition-all duration-300 ease-out
           ${entered ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"}
         `}

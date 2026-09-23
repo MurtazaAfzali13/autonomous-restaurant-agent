@@ -1,5 +1,6 @@
+from datetime import date
 from supabase import create_client, Client
-from app.config import SUPABASE_URL, SUPABASE_SERVICE_KEY, MAX_MESSAGES
+from app.config import SUPABASE_URL, SUPABASE_SERVICE_KEY, MAX_MESSAGES_PER_DAY
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
@@ -172,24 +173,53 @@ def cancel_order(order_id: int) -> tuple[bool, str]:
 
 
 # ---------------------------------------------------------------------------
-# Conversation / message-limit — سقف پیام برای هر thread
+# Conversation / message-limit — سقف ۱۰ پیام در روز، جدا برای هر کاربر
+#
+# جداسازی کاربران: thread_id همیشه برابر str(user_id) است (در routers/chat.py ساخته می‌شود)
+# و conversations.thread_id کلید اصلی جدول است — پس هر کاربر دقیقاً یک ردیف مخصوص خودش
+# دارد و هرگز شمارنده یا حافظه‌اش با کاربر دیگر قاطی نمی‌شود. LangGraph هم با همین
+# thread_id تاریخچه‌ی چت را جدا نگه می‌دارد (chat_memory.db)، و سبد خرید هم بر اساس همین
+# user_id از هم جدا است (get_or_create_active_cart). یعنی سه isolation مستقل — پیام‌شمار
+# روزانه، حافظه‌ی گفتگو، و سبد خرید — همه کلیدشان user_id/thread_id است.
 # ---------------------------------------------------------------------------
+
+def _today() -> str:
+    return date.today().isoformat()
+
 
 def get_or_create_conversation(thread_id: str, user_id: int) -> dict:
     res = supabase.table("conversations").select("*").eq("thread_id", thread_id).execute()
     if res.data:
         return res.data[0]
     created = supabase.table("conversations").insert(
-        {"thread_id": thread_id, "user_id": user_id, "message_count": 0}
+        {"thread_id": thread_id, "user_id": user_id, "message_count": 0, "message_date": _today()}
     ).execute()
     return created.data[0]
 
 
-def register_user_message(thread_id: str, user_id: int) -> dict:
-    """هر بار که پیام کاربر می‌رسد صدا زده می‌شود؛ اگر از سقف رد شد، وضعیت conversation به limited تغییر می‌کند."""
+def get_conversation_for_today(thread_id: str, user_id: int) -> dict:
+    """
+    گفتگوی «امروزِ» این کاربر را برمی‌گرداند. اگر آخرین باری که پیام فرستاده بود
+    روز دیگری بوده، شمارنده را خودکار صفر و وضعیت را open می‌کند — یعنی سقف واقعاً
+    روزانه است، نه یک‌بار برای همیشه.
+    """
     convo = get_or_create_conversation(thread_id, user_id)
+    if convo["message_date"] != _today():
+        convo = (
+            supabase.table("conversations")
+            .update({"message_count": 0, "status": "open", "message_date": _today()})
+            .eq("thread_id", thread_id)
+            .execute()
+            .data[0]
+        )
+    return convo
+
+
+def register_user_message(thread_id: str, user_id: int) -> dict:
+    """هر بار که پیام کاربر می‌رسد صدا زده می‌شود؛ اگر از سقف امروز رد شد، status به limited می‌رود."""
+    convo = get_conversation_for_today(thread_id, user_id)
     new_count = convo["message_count"] + 1
-    new_status = "limited" if new_count >= MAX_MESSAGES else convo["status"]
+    new_status = "limited" if new_count >= MAX_MESSAGES_PER_DAY else convo["status"]
     updated = (
         supabase.table("conversations")
         .update({"message_count": new_count, "status": new_status})
@@ -200,5 +230,7 @@ def register_user_message(thread_id: str, user_id: int) -> dict:
 
 
 def reset_conversation(thread_id: str) -> None:
-    """برای شروع دستی یک گفتگوی جدید با همان thread_id (مثلاً دکمه «گفتگوی جدید» در فرانت)."""
-    supabase.table("conversations").update({"message_count": 0, "status": "open"}).eq("thread_id", thread_id).execute()
+    """ریست دستی (دکمه «گفتگوی جدید» در فرانت) — سقف روزانه باز هم مستقل از این خودکار اعمال می‌شود."""
+    supabase.table("conversations").update(
+        {"message_count": 0, "status": "open", "message_date": _today()}
+    ).eq("thread_id", thread_id).execute()

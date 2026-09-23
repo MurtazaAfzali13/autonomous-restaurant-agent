@@ -13,8 +13,8 @@ OPENROUTER_BASE_URL: str = os.environ.get("OPENROUTER_BASE_URL", "https://openro
 # فرمت OpenRouter: "openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet", ...
 CHAT_MODEL: str = os.environ.get("CHAT_MODEL", "openai/gpt-4o-mini")
 
-# --- محدودیت گفتگو ---
-MAX_MESSAGES: int = int(os.environ.get("MAX_MESSAGES", 10))
+# --- محدودیت گفتگو (روزانه، به‌ازای هر کاربر) ---
+MAX_MESSAGES_PER_DAY: int = int(os.environ.get("MAX_MESSAGES_PER_DAY", 10))
 
 # --- LangGraph checkpointer ---
 CHECKPOINT_DB_PATH: str = os.environ.get("CHECKPOINT_DB_PATH", "chat_memory.db")

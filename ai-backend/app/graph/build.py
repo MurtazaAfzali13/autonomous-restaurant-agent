@@ -17,7 +17,6 @@ def build_graph():
     graph.add_conditional_edges("agent", tools_condition, {"tools": "tools", END: END})
     graph.add_edge("tools", "agent")
 
-    # چک‌پوینتر برای thread_id: هم حافظه‌ی چت هم توقف/ادامه در interrupt (HITL) از اینجا کار می‌کند
     conn = sqlite3.connect(CHECKPOINT_DB_PATH, check_same_thread=False)
     checkpointer = SqliteSaver(conn)
 
@@ -29,10 +28,8 @@ compiled_graph = build_graph()
 
 if __name__ == "__main__":
     try:
-        # دریافت عکس به صورت بایت (Bytes)
         png_bytes = compiled_graph.get_graph().draw_mermaid_png()
         
-        # ذخیره بایت‌ها در یک فایل با پسوند png
         file_name = "mermaid.png"
         with open(file_name, "wb") as f:
             f.write(png_bytes)

@@ -11,12 +11,12 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 def chat(req: ChatRequest):
     thread_id = str(req.user_id)
 
-    # --- محدودیت پیام ---
-    convo = db.get_or_create_conversation(thread_id, req.user_id)
+    # --- محدودیت روزانه ---
+    convo = db.get_conversation_for_today(thread_id, req.user_id)
     if convo["status"] == "limited":
         raise HTTPException(
             status_code=429,
-            detail="سقف پیام این گفتگو تمام شده. لطفاً گفتگوی جدید شروع کنید یا با پشتیبانی تماس بگیرید.",
+            detail="سقف ۱۰ پیام امروز شما تمام شده. فردا دوباره می‌توانید گفتگو کنید، یا گفتگوی جدید شروع کنید.",
         )
     db.register_user_message(thread_id, req.user_id)
 
@@ -26,6 +26,16 @@ def chat(req: ChatRequest):
         # پاسخ کاربر به سوال HITL «ثبت نهایی شود؟» — گراف از همان نقطه‌ی interrupt ادامه پیدا می‌کند
         result = compiled_graph.invoke(Command(resume=req.message), config=config)
     else:
+        # 🛡️ محافظت حیاتی: اگر این thread هنوز روی یک interrupt معلق مانده (کاربر هنوز
+        # بله/خیر نگفته)، اجازه نده یک نوبت تازه شروع شود — این دقیقاً همان چیزی است که
+        # تاریخچه‌ی چت را خراب می‌کند (AIMessage با tool_calls بدون ToolMessage پاسخ).
+        # به‌جایش همان سوال معلق را دوباره برمی‌گردانیم تا فرانت مجبور شود resume:true بفرستد.
+        snapshot = compiled_graph.get_state(config)
+        if snapshot.next:
+            for task in snapshot.tasks:
+                if task.interrupts:
+                    return {"type": "interrupt", "data": task.interrupts[0].value}
+
         result = compiled_graph.invoke(
             {
                 "messages": [{"role": "user", "content": req.message}],
