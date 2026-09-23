@@ -1,22 +1,36 @@
-import Database from "better-sqlite3";
-import path from "path";
 import { NextResponse } from "next/server";
-
-import { City } from "@/lib/types";
+import { createClient } from "@supabase/supabase-js";
+import { City } from "@/lib/types"; 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function GET() {
   try {
-    const dbPath = path.join(process.cwd(), "data", "lib", "map.db");
-    const db = new Database(dbPath);
+    const { data: cities, error } = await supabase
+      .from("cities")
+      .select("*");
 
-    // ✅ استفاده از type assertion
-    const cities = db.prepare("SELECT * FROM cities").all() as City[];
+    if (error) {
+      throw error;
+    }
 
-    db.close();
+    const formattedCities = cities.map((city: any) => ({
+      id: city.id,
+      cityName: city.city_name,
+      country: city.country,
+      emoji: city.emoji,
+      date: city.date,
+      notes: city.notes,
+      lat: city.lat,
+      lng: city.lng,
+      imageUrl: city.image_url,
+    }));
 
-    return NextResponse.json(cities);
+    return NextResponse.json(formattedCities);
+    
   } catch (error) {
-    console.error(error);
+    console.error("Error fetching cities from Supabase:", error);
     return NextResponse.json(
       { error: "Failed to fetch cities" },
       { status: 500 }
