@@ -1,10 +1,13 @@
 'use client';
 
 import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import clsx from "clsx";
+import { useSearchParams } from "next/navigation";
 
-export default function AuthPage() {
+function AuthPageInner() {
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") || "/";
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,7 +23,7 @@ export default function AuthPage() {
         redirect: true,
         email,
         password,
-        callbackUrl: "/",
+        callbackUrl: next,
       });
     } else {
       const res = await fetch("/api/auth/register", {
@@ -63,15 +66,15 @@ export default function AuthPage() {
 
       {/* بخش پس‌زمینه که کل صفحه را می‌گیرد */}
       <div className="responsive-bg flex items-center justify-center min-h-screen p-4 bg-cover bg-center bg-no-repeat relative">
-        
+
         {/* یک لایه تاریک‌کننده برای خواناتر شدن فرم روی عکس */}
         <div className="absolute inset-0 bg-black/40"></div>
 
         <div className="relative w-full max-w-md z-10">
-          
+
           {/* کانتینر اصلی با افکت شیشه‌ای */}
           <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl shadow-[0_8px_32px_0_rgba(31,38,135,0.37)] p-8">
-            
+
             {/* دکمه‌های جابجایی بین Signup و Login */}
             <div className="flex justify-center mb-8">
               <div className="flex bg-white/20 rounded-full p-1 border border-white/10">
@@ -80,8 +83,8 @@ export default function AuthPage() {
                   onClick={() => setIsLogin(false)}
                   className={clsx(
                     "px-8 py-2 rounded-full text-sm font-medium transition-all duration-300",
-                    !isLogin 
-                      ? "bg-white text-rose-500 shadow-md" 
+                    !isLogin
+                      ? "bg-white text-rose-500 shadow-md"
                       : "text-white/80 hover:text-white"
                   )}
                 >
@@ -92,8 +95,8 @@ export default function AuthPage() {
                   onClick={() => setIsLogin(true)}
                   className={clsx(
                     "px-8 py-2 rounded-full text-sm font-medium transition-all duration-300",
-                    isLogin 
-                      ? "bg-white text-rose-500 shadow-md" 
+                    isLogin
+                      ? "bg-white text-rose-500 shadow-md"
                       : "text-white/80 hover:text-white"
                   )}
                 >
@@ -132,7 +135,7 @@ export default function AuthPage() {
                 className="w-full bg-white/20 border border-white/30 p-3.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 text-black placeholder-white/70 shadow-inner"
                 required
               />
-              
+
               <input
                 type="password"
                 placeholder="Password"
@@ -160,5 +163,13 @@ export default function AuthPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={null}>
+      <AuthPageInner />
+    </Suspense>
   );
 }

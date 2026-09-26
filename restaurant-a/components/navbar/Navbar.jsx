@@ -13,6 +13,7 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [hasOrders, setHasOrders] = useState(false);
+  const [hasReservations, setHasReservations] = useState(false); // ← اضافه شد
   const pathname = usePathname();
   const { state } = useCart();
   const { data: session } = useSession();
@@ -21,7 +22,7 @@ export default function Navbar() {
   const isAdmin = session?.user?.role === "admin";
 
   const publicNavItems = [
-    { name: "Home", href: "/" },
+    { name: "Room", href: "/rooms" },
     { name: "Menu", href: "/menu" },
     { name: "About", href: "/about" },
     { name: "Gallery", href: "/gallery" },
@@ -45,6 +46,19 @@ export default function Navbar() {
       .then(data => setHasOrders((data.orders?.length || 0) > 0))
       .catch(() => setHasOrders(false));
   }, [isLoggedIn, session?.user?.email, isAdmin]);
+
+  // فقط کاربران عادی My Reservations را بررسی می‌کنند ← اضافه شد
+  useEffect(() => {
+    if (!isLoggedIn || isAdmin) {
+      setHasReservations(false);
+      return;
+    }
+
+    fetch("/api/reservations")
+      .then(res => res.json())
+      .then(data => setHasReservations((Array.isArray(data) ? data.length : 0) > 0))
+      .catch(() => setHasReservations(false));
+  }, [isLoggedIn, isAdmin]);
 
   useEffect(() => {
     if (pathname === "/") {
@@ -114,6 +128,22 @@ export default function Navbar() {
             </Link>
           )}
 
+          {/* Reservations فقط برای Admin ← اضافه شد */}
+          {isLoggedIn && isAdmin && (
+            <Link
+              href="/admin/reservations"
+              className={`px-3 py-2 font-semibold transition-colors duration-300 ${
+                pathname === "/admin/reservations"
+                  ? "text-emerald-300"
+                  : scrolled
+                  ? "text-gray-200 hover:text-emerald-300"
+                  : "text-white hover:text-emerald-300"
+              }`}
+            >
+              🛎️ Reservations
+            </Link>
+          )}
+
           {/* My Orders فقط برای کاربران عادی */}
           {isLoggedIn && !isAdmin && hasOrders && (
             <Link
@@ -127,6 +157,22 @@ export default function Navbar() {
               }`}
             >
               🧾 My Orders
+            </Link>
+          )}
+
+          {/* My Reservations فقط برای کاربران عادی ← اضافه شد */}
+          {isLoggedIn && !isAdmin && hasReservations && (
+            <Link
+              href="/reservations"
+              className={`px-3 py-2 font-semibold transition-colors duration-300 ${
+                pathname === "/reservations"
+                  ? "text-emerald-300"
+                  : scrolled
+                  ? "text-gray-200 hover:text-emerald-300"
+                  : "text-white hover:text-emerald-300"
+              }`}
+            >
+              🛏️ My Reservations
             </Link>
           )}
 
@@ -202,6 +248,17 @@ export default function Navbar() {
               </Link>
             )}
 
+            {/* Reservations فقط برای Admin ← اضافه شد */}
+            {isLoggedIn && isAdmin && (
+              <Link
+                href="/admin/reservations"
+                onClick={() => setIsOpen(false)}
+                className="px-3 py-2 font-semibold transition-colors duration-200 text-gray-100 hover:text-emerald-300"
+              >
+                🛎️ Reservations
+              </Link>
+            )}
+
             {/* My Orders فقط برای کاربران عادی */}
             {isLoggedIn && !isAdmin && hasOrders && (
               <Link
@@ -210,6 +267,17 @@ export default function Navbar() {
                 className="px-3 py-2 font-semibold transition-colors duration-200 text-gray-100 hover:text-emerald-300"
               >
                 🧾 My Orders
+              </Link>
+            )}
+
+            {/* My Reservations فقط برای کاربران عادی ← اضافه شد */}
+            {isLoggedIn && !isAdmin && hasReservations && (
+              <Link
+                href="/reservations"
+                onClick={() => setIsOpen(false)}
+                className="px-3 py-2 font-semibold transition-colors duration-200 text-gray-100 hover:text-emerald-300"
+              >
+                🛏️ My Reservations
               </Link>
             )}
 
