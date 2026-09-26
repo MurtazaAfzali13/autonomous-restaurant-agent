@@ -10,30 +10,30 @@ import { motion } from 'framer-motion'
 const events = [
   {
     title: 'Custom Parties',
-    price: '$99',
+    price: 'From $99',
     description:
-      'Quo corporis voluptas ea ad. Consectetur inventore sapiente ipsum voluptas eos omnis facere.',
+      'A private space for small get-togethers, tailored to your group size with a custom set menu.',
     image: '/images/gallery/events-1.jpg',
   },
   {
     title: 'Private Parties',
-    price: '$289',
+    price: 'From $289',
     description:
-      'In delectus sint qui et enim. Facere nemo vero est ut dolores ea assumenda et.',
+      'A reserved section of the restaurant for evening gatherings, with dedicated staff and a curated food selection.',
     image: '/images/gallery/events-2.jpg',
   },
   {
     title: 'Birthday Parties',
-    price: '$499',
+    price: 'From $499',
     description:
-      'Laborum aperiam atque omnis minus omnis est qui assumenda quos.',
+      'Decorated seating, a custom cake option, and a set menu designed for celebrations of any size.',
     image: '/images/gallery/events-3.jpg',
   },
   {
     title: 'Wedding Parties',
-    price: '$899',
+    price: 'From $899',
     description:
-      'Esse quisquam ducimus officia ipsum ut quibusdam maxime.',
+      'Full-venue booking for wedding celebrations, including a multi-course menu and dedicated event coordination.',
     image: '/images/gallery/events-4.jpg',
   },
 ]

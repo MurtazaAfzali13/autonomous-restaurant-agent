@@ -9,28 +9,28 @@ import { motion } from 'framer-motion'
 
 const testimonials = [
   {
-    name: 'Saul Goodman',
-    role: 'CEO & Founder',
+    name: 'Ahmad R.',
+    role: 'Regular Customer',
     image: '/images/about/testimonials-1.jpg',
-    text: 'Proin iaculis purus consequat sem cure dignissim donec porttitora entum suscipit rhoncus.',
+    text: 'The mantu here tastes just like home cooking. Ordering through the site was quick and the delivery was right on time.',
   },
   {
-    name: 'Sara Wilsson',
-    role: 'Designer',
+    name: 'Laila S.',
+    role: 'Local Guest',
     image: '/images/about/testimonials-2.jpg',
-    text: 'Export tempor illum tamen malis malis eram quae irure esse labore quem cillum quid.',
+    text: 'Booked the Deluxe Room for a family visit and the staff made everything easy, from check-in to breakfast.',
   },
   {
-    name: 'Jena Karlis',
-    role: 'Store Owner',
+    name: 'Farid M.',
+    role: 'First-time Visitor',
     image: '/images/about/testimonials-3.jpg',
-    text: 'Enim nisi quem export duis labore cillum quae magna enim sint quorum nulla quem veniam.',
+    text: 'Loved the kabuli pulao. The online menu made it simple to see exactly what I was ordering before checkout.',
   },
   {
-    name: 'John Larson',
-    role: 'Entrepreneur',
+    name: 'Zainab K.',
+    role: 'Returning Customer',
     image: '/images/about/testimonials-4.jpg',
-    text: 'Fugiat enim eram quae cillum dolore dolor amet nulla culpa multos export minim fugiat minim velit.',
+    text: 'Great flavors and fast service. The chat assistant even helped me reorder my usual dish in seconds.',
   },
 ]
 
@@ -105,7 +105,7 @@ export default function Testimonials() {
                 <div className="relative bg-slate-900/60 backdrop-blur-xl border border-slate-800 shadow-[0_15px_50px_-12px_rgba(0,0,0,0.5)] rounded-[2.5rem] p-8 md:p-10 max-w-2xl">
                   {/* علامت نقل قول تزئینی (بالا چپ) */}
                   <div className="absolute -top-4 -left-2 text-8xl text-emerald-500/10 font-serif leading-none select-none pointer-events-none">
-                    “
+                    "
                   </div>
                   
                   <p className="text-slate-300 italic text-lg md:text-xl leading-relaxed relative z-10 font-light">
@@ -138,7 +138,7 @@ export default function Testimonials() {
                   
                   {/* علامت نقل قول تزئینی (پایین راست) */}
                   <div className="absolute -bottom-10 -right-2 text-8xl text-emerald-500/10 font-serif leading-none select-none pointer-events-none rotate-180">
-                    “
+                    "
                   </div>
                 </div>
               </motion.div>

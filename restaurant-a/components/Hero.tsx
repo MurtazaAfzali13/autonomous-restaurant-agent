@@ -3,9 +3,9 @@
 import { Users, Clock, Coffee } from "lucide-react";
 
 const stats = [
-  { value: "25+", label: "Years", icon: Clock, bgColor: "bg-green-100", iconColor: "text-green-500" },
-  { value: "50k+", label: "Customers", icon: Users, bgColor: "bg-emerald-100", iconColor: "text-emerald-500" },
-  { value: "200+", label: "Dishes", icon: Coffee, bgColor: "bg-yellow-100", iconColor: "text-yellow-500" },
+  { value: "5+", label: "Years", icon: Clock, bgColor: "bg-green-100", iconColor: "text-green-500" },
+  { value: "1k+", label: "Customers", icon: Users, bgColor: "bg-emerald-100", iconColor: "text-emerald-500" },
+  { value: "40+", label: "Dishes", icon: Coffee, bgColor: "bg-yellow-100", iconColor: "text-yellow-500" },
 ];
 
 export default function Hero() {
@@ -33,33 +33,34 @@ export default function Hero() {
             <div className="inline-block mb-6">
               <div className="inline-flex items-center bg-white rounded-full px-4 py-2 shadow-md">
                 <div className="w-4 h-4 bg-green-500 rounded-full mr-2" />
-                <span className="text-sm font-medium text-gray-800">Badge Text</span>
+                <span className="text-sm font-medium text-gray-800">Now Delivering & Taking Reservations</span>
               </div>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold mb-6 leading-tight">
-              <span className="text-gray-100">Title</span>{" "}
+              <span className="text-gray-100">Authentic</span>{" "}
               <span className="bg-clip-text text-transparent bg-gradient-to-r from-green-500 to-emerald-500">
-                Highlight
+                Afghan Feast
               </span>
             </h1>
 
             <p className="text-gray-400 text-lg sm:text-xl max-w-xl leading-relaxed mb-8 mx-auto lg:mx-0">
-              Short description goes here for your hero section.
+              Traditional Afghan dishes made fresh daily, paired with comfortable rooms for your stay —
+              order online or book a table in minutes.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start mb-12">
               <a
-                href="#"
+                href="/menu"
                 className="px-8 py-4 rounded-full font-semibold text-white bg-gradient-to-r from-green-500 to-emerald-500 hover:shadow-xl hover:-translate-y-1 transition-transform"
               >
-                Primary Button
+                Order Now
               </a>
               <a
-                href="#"
+                href="/rooms"
                 className="px-8 py-4 text-gray-200 rounded-full font-semibold border-2 border-gray-200 hover:bg-gray-900 hover:text-white transition-colors"
               >
-                Secondary Button
+                View Rooms
               </a>
             </div>
 
@@ -87,7 +88,7 @@ export default function Hero() {
             <div className="relative w-full max-w-sm sm:max-w-md lg:max-w-lg mx-auto animate-[float_6s_ease-in-out_infinite]">
               <img
                 src="/images/logo/menu-item-1.png"
-                alt="Hero Image"
+                alt="Signature Afghan dish at Ariana Feast"
                 className="relative z-10 w-full rounded-2xl shadow-2xl object-cover"
               />
 
