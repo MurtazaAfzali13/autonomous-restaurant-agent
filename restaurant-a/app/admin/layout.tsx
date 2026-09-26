@@ -1,30 +1,21 @@
+// app/admin/layout.tsx
 import { ReactNode } from "react";
-import { getToken } from "next-auth/jwt";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
-import { cookies, headers } from "next/headers";
-import type { NextRequest } from "next/server";
 
 interface AdminLayoutProps {
   children: ReactNode;
 }
 
 export default async function AdminLayout({ children }: AdminLayoutProps) {
-  // ساخت یک شی شبیه NextRequest
-  const req = {
-    headers,
-    cookies,
-  } as unknown as NextRequest; // cast برای رفع خطای تایپ
+  const session = await getServerSession(authOptions);
 
-  const token = await getToken({
-    secret: process.env.NEXTAUTH_SECRET,
-    req,
-  });
-
-  if (!token) {
+  if (!session?.user) {
     redirect("/auth");
   }
 
-  if (token.role !== "admin") {
+  if ((session.user as any).role !== "admin") {
     redirect("/403");
   }
 
