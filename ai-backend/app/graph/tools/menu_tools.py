@@ -5,9 +5,12 @@ from app import db
 
 @tool
 def search_menu(category: Optional[str] = None, search_term: Optional[str] = None) -> str:
-    """جستجو در منوی رستوران بر اساس دسته‌بندی (category) یا نام غذا (search_term)."""
-    meals = db.search_meals(category=category, search_term=search_term)
+    """Search the restaurant menu by category or by meal name (search_term)."""
+    try:
+        meals = db.search_meals(category=category, search_term=search_term)
+    except Exception as e:
+        return f"Couldn't reach the database to search the menu right now ({type(e).__name__}). Please try again in a moment."
     if not meals:
-        return "غذایی با این مشخصات در منو پیدا نشد."
-    lines = [f"- کد {m['id']}: {m['title']} | ${m['price']} | {m['summary']}" for m in meals]
+        return "No meals found matching that description."
+    lines = [f"- id {m['id']}: {m['title']} | ${m['price']} | {m['summary']}" for m in meals]
     return "\n".join(lines)

@@ -10,3 +10,6 @@ class AgentState(TypedDict):
     thread_id: str
     cart_snapshot: list[dict]
     last_order_id: Optional[int]
+    pending_checkout: Optional[dict]
+    pending_room_booking: Optional[dict]
+    last_reservation_id: Optional[int]
