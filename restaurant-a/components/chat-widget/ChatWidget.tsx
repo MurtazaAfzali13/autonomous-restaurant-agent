@@ -7,16 +7,13 @@ import { useChatSession } from "./useChatSession";
 import type { ChatUser } from "./types";
 
 interface ChatWidgetProps {
-  /**
-   * کاربر فعلی. اگر پاس داده نشود، از یک کاربر مهمان (guest) استفاده می‌شود —
-   * برای رستوران واقعی پیشنهاد می‌شود این را از session/auth واقعی پروژه پر کنید.
-   */
+
   user?: ChatUser;
 }
 
 const GUEST_USER: ChatUser = {
   id: 0,
-  name: "مهمان",
+  name: "Guest",
   email: "guest@example.com",
 };
 

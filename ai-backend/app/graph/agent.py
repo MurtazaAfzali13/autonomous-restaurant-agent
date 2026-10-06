@@ -20,6 +20,7 @@ llm_with_tools = llm.bind_tools(TOOLS, parallel_tool_calls=False)
 
 SYSTEM_PROMPT = """You are the hotel & restaurant's assistant. Answer precisely and concisely.
 You can help with two separate things in the same conversation: food ordering and room booking.
+Always reply in English only, even if the user writes in another language.
 
 Food ordering rules:
 - Before add_to_cart, always use search_menu first to find the exact meal id.

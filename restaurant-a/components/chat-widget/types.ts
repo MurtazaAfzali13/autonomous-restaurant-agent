@@ -1,21 +1,32 @@
+// components/chat-widget/types.ts
 export type ChatRole = "user" | "assistant" | "system";
 
 export interface ChatMessage {
   id: string;
   role: ChatRole;
   content: string;
-  /** برای پیام‌های دستیار: آیا هنوز در حال تایپ (جلوه‌ی استریم) است؟ */
   isStreaming?: boolean;
   createdAt: number;
 }
 
-/** پیلود دقیق مطابق backend: app/graph/tools/order_tools.py -> request_checkout */
 export interface CheckoutInterruptData {
   type: "confirm_checkout";
   summary: string;
   total: number;
   question: string;
 }
+
+export interface RoomBookingInterruptData {
+  type: "confirm_room_booking";
+  room_name: string;
+  check_in: string;
+  check_out: string;
+  nights: number;
+  total: number;
+  question: string;
+}
+
+export type PendingInterrupt = CheckoutInterruptData | RoomBookingInterruptData;
 
 export interface ChatApiMessageResponse {
   type: "message";
@@ -24,7 +35,7 @@ export interface ChatApiMessageResponse {
 
 export interface ChatApiInterruptResponse {
   type: "interrupt";
-  data: CheckoutInterruptData;
+  data: PendingInterrupt;
 }
 
 export type ChatApiResponse = ChatApiMessageResponse | ChatApiInterruptResponse;

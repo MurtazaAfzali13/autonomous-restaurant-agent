@@ -20,8 +20,8 @@ export function ChatLauncher({ onClick }: { onClick: () => void }) {
         <span className="absolute -left-1 -top-1 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-indigo-600" />
       </span>
       <span className="flex flex-col">
-        <span className="text-sm font-semibold text-white">دستیار هوشمند</span>
-        <span className="text-xs text-white/80">هر سوالی داری بپرس ✨</span>
+        <span className="text-sm font-semibold text-white">Assistant</span>
+        <span className="text-xs text-white/80">Any question do you have✨</span>
       </span>
     </button>
   );

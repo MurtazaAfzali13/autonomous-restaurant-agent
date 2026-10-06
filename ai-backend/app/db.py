@@ -105,9 +105,6 @@ def clear_cart(cart_id: int) -> None:
     _execute(supabase.table("cart_items").delete().eq("cart_id", cart_id))
 
 
-# ---------------------------------------------------------------------------
-# Orders
-# ---------------------------------------------------------------------------
 
 def create_order_from_cart(user_id: int, customer_name: str, customer_email: str) -> dict:
     cart = get_or_create_active_cart(user_id)
@@ -190,17 +187,6 @@ def cancel_order(order_id: int) -> tuple[bool, str]:
     return False, f"Unknown order status: {status}"
 
 
-# ---------------------------------------------------------------------------
-# Rooms & Reservations
-#
-# Mirrors the exact same design as Orders above: availability is computed live
-# from the database (never trusted from the model), price is always calculated
-# server-side from the room's real price_per_night (never from what the user
-# says), and cancellation follows one strict rule table — see cancel_reservation.
-# No custom Postgres RPC is required: availability is computed with two plain
-# queries (active rooms with enough capacity, minus rooms with an overlapping
-# reservation), so this works against the schema as-is.
-# ---------------------------------------------------------------------------
 
 def search_available_rooms(check_in: str, check_out: str, guests: int = 1) -> list[dict]:
     rooms_query = (

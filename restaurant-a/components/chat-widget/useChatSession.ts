@@ -1,3 +1,4 @@
+// components/chat-widget/useChatSession.ts
 "use client";
 
 import { useCallback, useRef, useState } from "react";
@@ -5,13 +6,11 @@ import type {
   ChatApiResponse,
   ChatMessage,
   ChatUser,
-  CheckoutInterruptData,
+  PendingInterrupt,
 } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_CHAT_API_URL ?? "http://127.0.0.1:8000";
 
-// سرعت جلوه‌ی تایپ‌شوندگی (میلی‌ثانیه بین هر کاراکتر). بک‌اند استریم واقعی ندارد،
-// این فقط حس تولید زنده را شبیه‌سازی می‌کند بعد از رسیدن جواب کامل.
 const TYPEWRITER_MS_PER_CHAR = 12;
 
 function uid() {
@@ -23,15 +22,13 @@ type Status = "idle" | "thinking" | "limited" | "error";
 export function useChatSession(user: ChatUser) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<Status>("idle");
-  const [pendingCheckout, setPendingCheckout] = useState<CheckoutInterruptData | null>(null);
+  const [pendingCheckout, setPendingCheckout] = useState<PendingInterrupt | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const typewriterTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const appendMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
   }, []);
-
-  /** جواب دستیار را کاراکتر به کاراکتر آشکار می‌کند تا حس استریم بدهد */
   const streamAssistantText = useCallback((fullText: string) => {
     const id = uid();
     appendMessage({ id, role: "assistant", content: "", isStreaming: true, createdAt: Date.now() });
@@ -53,7 +50,6 @@ export function useChatSession(user: ChatUser) {
   const handleApiResponse = useCallback(
     (data: ChatApiResponse) => {
       if (data.type === "interrupt") {
-        // نقطه‌ی HITL: گراف متوقف شده، باید کارت تایید نشان داده شود نه یک پیام معمولی
         setPendingCheckout(data.data);
         streamAssistantText(data.data.question);
       } else {
@@ -92,14 +88,14 @@ export function useChatSession(user: ChatUser) {
           appendMessage({
             id: uid(),
             role: "system",
-            content: "سقف پیام این گفتگو تمام شده. برای ادامه، گفتگوی جدید شروع کنید.",
+            content: "The message limit for this conversation has been reached. To continue, start a new conversation.",
             createdAt: Date.now(),
           });
           return;
         }
 
         if (!res.ok) {
-          throw new Error(`خطای سرور (${res.status})`);
+          throw new Error(`Server error (${res.status})`);
         }
 
         const data: ChatApiResponse = await res.json();
@@ -107,20 +103,20 @@ export function useChatSession(user: ChatUser) {
         setStatus("idle");
       } catch (err) {
         setStatus("error");
-        setErrorText(err instanceof Error ? err.message : "ارتباط با سرور برقرار نشد.");
+        setErrorText(err instanceof Error ? err.message : "Could not connect to the server.");
       }
     },
     [appendMessage, handleApiResponse, user]
   );
 
-  /** کاربر روی «تایید و ثبت سفارش» یا «انصراف» کلیک کرده — پاسخ HITL */
+
   const resolveCheckout = useCallback(
     (confirmed: boolean) => {
-      const answer = confirmed ? "بله" : "خیر";
+      const answer = confirmed ? "yes" : "no";
       appendMessage({
         id: uid(),
         role: "user",
-        content: confirmed ? "✅ تایید می‌کنم، ثبت شود" : "❌ انصراف",
+        content: confirmed ? "✅ I confirm" : "❌ Cancel",
         createdAt: Date.now(),
       });
       setPendingCheckout(null);
@@ -133,7 +129,6 @@ export function useChatSession(user: ChatUser) {
     try {
       await fetch(`${API_BASE}/chat/reset?thread_id=${user.id}`, { method: "POST" });
     } catch {
-      // اگر ریست سمت سرور fail شود هم اجازه بده کاربر از نو شروع کند
     }
     setMessages([]);
     setPendingCheckout(null);
