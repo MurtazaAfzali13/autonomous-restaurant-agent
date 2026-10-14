@@ -7,19 +7,13 @@ import { useChatSession } from "./useChatSession";
 import type { ChatUser } from "./types";
 
 interface ChatWidgetProps {
-
+  /** @deprecated هویت از نشست NextAuth (توکن) می‌آید؛ این prop دیگر استفاده نمی‌شود. */
   user?: ChatUser;
 }
 
-const GUEST_USER: ChatUser = {
-  id: 0,
-  name: "Guest",
-  email: "guest@example.com",
-};
-
-export default function ChatWidget({ user = GUEST_USER }: ChatWidgetProps) {
+export default function ChatWidget(_props: ChatWidgetProps) {
   const [open, setOpen] = useState(false);
-  const session = useChatSession(user);
+  const session = useChatSession();
 
   return (
     <>

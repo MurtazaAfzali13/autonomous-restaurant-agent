@@ -1,8 +1,12 @@
+from datetime import date
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolCallId
 from langchain_core.messages import ToolMessage
+from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from app import db
+
+UserId = Annotated[int, InjectedState("user_id")]
 
 
 @tool
@@ -43,7 +47,7 @@ def get_room_details(room_id: int) -> str:
 
 @tool
 def request_room_booking(
-    user_id: int,
+    user_id: UserId,
     room_id: int,
     check_in: str,
     check_out: str,
@@ -56,37 +60,32 @@ def request_room_booking(
     Like request_checkout, this does NOT book the room itself and does NOT pause
     the graph — it only records that a booking was requested. The actual yes/no
     pause (HITL) happens right after, in a dedicated graph node
-    (confirm_room_booking_node), never inside this tool. That separation is what
-    keeps the chat history from getting corrupted, even if the model calls
-    another tool (e.g. a food-cart tool) in the same turn.
+    (confirm_room_booking_node), never inside this tool.
     """
+    def reply(text: str) -> Command:
+        return Command(update={"messages": [ToolMessage(text, tool_call_id=tool_call_id)]})
+
     try:
         room = db.get_room(room_id)
     except Exception as e:
-        return Command(update={
-            "messages": [ToolMessage(
-                f"Couldn't reach the database to look up that room right now ({type(e).__name__}). Please try again in a moment.",
-                tool_call_id=tool_call_id,
-            )],
-        })
-
+        return reply(f"Couldn't reach the database to look up that room right now ({type(e).__name__}). Please try again in a moment.")
     if not room:
-        return Command(update={
-            "messages": [ToolMessage("No room found with that id.", tool_call_id=tool_call_id)],
-        })
+        return reply("No room found with that id.")
 
-    from datetime import date as _date
     try:
-        nights = (_date.fromisoformat(check_out) - _date.fromisoformat(check_in)).days
+        check_in_date = date.fromisoformat(check_in)
+        nights = (date.fromisoformat(check_out) - check_in_date).days
     except ValueError:
-        return Command(update={
-            "messages": [ToolMessage("Dates must be in YYYY-MM-DD format.", tool_call_id=tool_call_id)],
-        })
+        return reply("Dates must be in YYYY-MM-DD format.")
 
+    if check_in_date < date.fromisoformat(db.today_str()):
+        return reply("The check-in date can't be in the past.")
     if nights < 1:
-        return Command(update={
-            "messages": [ToolMessage("Check-out must be after check-in.", tool_call_id=tool_call_id)],
-        })
+        return reply("Check-out must be after check-in.")
+    if nights > 30:
+        return reply("The stay must be between 1 and 30 nights.")
+    if adults < 1 or children < 0 or adults + children > room["capacity"]:
+        return reply("The number of guests exceeds this room's capacity.")
 
     total = nights * float(room["price_per_night"])
 
@@ -107,10 +106,10 @@ def request_room_booking(
 
 
 @tool
-def check_reservation_status(reservation_id: int) -> str:
-    """Check the current status of a room reservation by its reservation number."""
+def check_reservation_status(reservation_id: int, user_id: UserId) -> str:
+    """Check the current status of one of the user's own room reservations by its number."""
     try:
-        status = db.get_reservation_status(reservation_id)
+        status = db.get_reservation_status(reservation_id, user_id)
     except Exception as e:
         return f"Couldn't reach the database to check that reservation right now ({type(e).__name__}). Please try again in a moment."
     if status is None:
@@ -127,21 +126,21 @@ def check_reservation_status(reservation_id: int) -> str:
 
 
 @tool
-def cancel_reservation(reservation_id: int) -> str:
+def cancel_reservation(reservation_id: int, user_id: UserId) -> str:
     """
-    Request to cancel a room reservation. Only succeeds while the status is still
-    pending or confirmed AND the check-in date hasn't arrived yet. Otherwise the
+    Request to cancel one of the user's own room reservations. Only succeeds while the status
+    is still pending or confirmed AND the check-in date hasn't arrived yet. Otherwise the
     guest is pointed to contact the hotel directly.
     """
     try:
-        _, message = db.cancel_reservation(reservation_id)
+        _, message = db.cancel_reservation(reservation_id, user_id)
         return message
     except Exception as e:
         return f"Couldn't reach the database to cancel that reservation right now ({type(e).__name__}). Please try again in a moment."
 
 
 @tool
-def list_my_reservations(user_id: int) -> str:
+def list_my_reservations(user_id: UserId) -> str:
     """Show all of this user's room reservations — always read live from the database, never guessed."""
     try:
         rows = db.get_user_reservations(user_id)

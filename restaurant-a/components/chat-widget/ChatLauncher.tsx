@@ -8,20 +8,20 @@ export function ChatLauncher({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="
         group fixed bottom-6 right-6 z-40 flex items-center gap-3
-        rounded-2xl bg-gradient-to-br from-indigo-500 via-violet-500 to-blue-600
-        px-5 py-4 text-left shadow-lg shadow-violet-900/30
+        rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600
+        px-5 py-4 text-left shadow-lg shadow-orange-500/30
         transition-transform duration-200 hover:scale-[1.03] active:scale-[0.98]
-        focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300
       "
       aria-label="باز کردن چت با دستیار هوشمند"
     >
-      <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15">
+      <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20">
         <Sparkles className="h-4 w-4 text-white" />
-        <span className="absolute -left-1 -top-1 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-indigo-600" />
+        <span className="absolute -left-1 -top-1 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-orange-600" />
       </span>
       <span className="flex flex-col">
         <span className="text-sm font-semibold text-white">Assistant</span>
-        <span className="text-xs text-white/80">Any question do you have✨</span>
+        <span className="text-xs text-white/90">Any question do you have✨</span>
       </span>
     </button>
   );

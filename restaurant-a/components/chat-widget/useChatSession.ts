@@ -2,14 +2,8 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type {
-  ChatApiResponse,
-  ChatMessage,
-  ChatUser,
-  PendingInterrupt,
-} from "./types";
-
-const API_BASE = process.env.NEXT_PUBLIC_CHAT_API_URL ?? "http://127.0.0.1:8000";
+import { sendChat, DailyLimitError } from "@/lib/backend-client";
+import type { ChatApiResponse, ChatMessage, PendingInterrupt } from "./types";
 
 const TYPEWRITER_MS_PER_CHAR = 12;
 
@@ -19,7 +13,8 @@ function uid() {
 
 type Status = "idle" | "thinking" | "limited" | "error";
 
-export function useChatSession(user: ChatUser) {
+// هویت کاربر دیگر از فرانت فرستاده نمی‌شود؛ بک‌اند آن را از JWT می‌خواند.
+export function useChatSession() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [pendingCheckout, setPendingCheckout] = useState<PendingInterrupt | null>(null);
@@ -29,6 +24,7 @@ export function useChatSession(user: ChatUser) {
   const appendMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
   }, []);
+
   const streamAssistantText = useCallback((fullText: string) => {
     const id = uid();
     appendMessage({ id, role: "assistant", content: "", isStreaming: true, createdAt: Date.now() });
@@ -71,44 +67,31 @@ export function useChatSession(user: ChatUser) {
       setStatus("thinking");
 
       try {
-        const res = await fetch(`${API_BASE}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: user.id,
-            customer_name: user.name,
-            customer_email: user.email,
-            message: text,
-            resume,
-          }),
-        });
-
-        if (res.status === 429) {
+        const data = (await sendChat(text, resume)) as ChatApiResponse;
+        handleApiResponse(data);
+        window.dispatchEvent(new Event("cart:refresh"));
+        setStatus("idle");
+      } catch (err) {
+        if (err instanceof DailyLimitError) {
           setStatus("limited");
           appendMessage({
             id: uid(),
             role: "system",
-            content: "The message limit for this conversation has been reached. To continue, start a new conversation.",
+            content: "You've reached today's message limit. Please come back tomorrow.",
             createdAt: Date.now(),
           });
           return;
         }
-
-        if (!res.ok) {
-          throw new Error(`Server error (${res.status})`);
-        }
-
-        const data: ChatApiResponse = await res.json();
-        handleApiResponse(data);
-        setStatus("idle");
-      } catch (err) {
         setStatus("error");
-        setErrorText(err instanceof Error ? err.message : "Could not connect to the server.");
+        if (err instanceof Error && err.message === "NOT_LOGGED_IN") {
+          setErrorText("Please log in to use the assistant.");
+        } else {
+          setErrorText(err instanceof Error ? err.message : "Could not connect to the server.");
+        }
       }
     },
-    [appendMessage, handleApiResponse, user]
+    [appendMessage, handleApiResponse]
   );
-
 
   const resolveCheckout = useCallback(
     (confirmed: boolean) => {
@@ -125,16 +108,13 @@ export function useChatSession(user: ChatUser) {
     [appendMessage, send]
   );
 
-  const resetConversation = useCallback(async () => {
-    try {
-      await fetch(`${API_BASE}/chat/reset?thread_id=${user.id}`, { method: "POST" });
-    } catch {
-    }
+  // فقط نمای چت را پاک می‌کند. سقف روزانه‌ی پیام سمت سرور است و با این دکمه ریست نمی‌شود.
+  const resetConversation = useCallback(() => {
     setMessages([]);
     setPendingCheckout(null);
     setErrorText(null);
-    setStatus("idle");
-  }, [user.id]);
+    setStatus((s) => (s === "limited" ? s : "idle"));
+  }, []);
 
   return {
     messages,

@@ -1,8 +1,5 @@
-import sqlite3
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
-from langgraph.checkpoint.sqlite import SqliteSaver
-from app.config import CHECKPOINT_DB_PATH
 from app.graph.state import AgentState
 from app.graph.agent import agent_node
 from app.graph.confirm import confirm_checkout_node, confirm_room_booking_node
@@ -12,9 +9,8 @@ from app.graph.tools import TOOLS
 def route_after_tools(state: AgentState) -> str:
     """
     اگر request_checkout یا request_room_booking در همین نوبت صدا زده شده باشد،
-    مستقیم به نود confirm مربوطه برو تا آنجا — تنها و مستقل — interrupt() اجرا شود.
-    وگرنه طبق روال عادی برگرد به agent. این دو حالت هرگز هم‌زمان پر نمی‌شوند چون
-    parallel_tool_calls=False است، پس هر نوبت حداکثر یکی از این دو را صدا می‌زند.
+    به نود confirm مربوطه برو تا interrupt() مستقل اجرا شود؛ وگرنه برگرد به agent.
+    (با parallel_tool_calls=False این دو هرگز هم‌زمان پر نمی‌شوند.)
     """
     if state.get("pending_checkout"):
         return "confirm_checkout"
@@ -23,7 +19,8 @@ def route_after_tools(state: AgentState) -> str:
     return "agent"
 
 
-def build_graph():
+def build_graph(checkpointer):
+    """گراف را با checkpointer‌ای که lifespan ساخته کامپایل می‌کند (بدون اتصال در سطح ماژول)."""
     graph = StateGraph(AgentState)
     graph.add_node("agent", agent_node)
     graph.add_node("tools", ToolNode(TOOLS))
@@ -40,10 +37,4 @@ def build_graph():
     graph.add_edge("confirm_checkout", END)
     graph.add_edge("confirm_room_booking", END)
 
-    conn = sqlite3.connect(CHECKPOINT_DB_PATH, check_same_thread=False)
-    checkpointer = SqliteSaver(conn)
-
     return graph.compile(checkpointer=checkpointer)
-
-
-compiled_graph = build_graph()
