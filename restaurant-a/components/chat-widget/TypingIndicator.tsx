@@ -8,19 +8,18 @@ export function TypingIndicator() {
           className="absolute inset-0 animate-spin rounded-full"
           style={{
             background:
-              "conic-gradient(from 0deg, transparent 0%, #818cf8 35%, #a78bfa 60%, transparent 100%)",
+              "conic-gradient(from 0deg, transparent 0%, #fdba74 35%, #f97316 60%, transparent 100%)",
             WebkitMask: "radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px))",
             mask: "radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px))",
           }}
         />
-        <span className="h-6 w-6 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600" />
+        <span className="h-6 w-6 rounded-full bg-gradient-to-br from-orange-400 to-orange-600" />
       </div>
 
-      {/* Changed rounded-br-sm to rounded-bl-sm for LTR layout */}
-      <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm border border-slate-800 bg-slate-900 px-4 py-3.5">
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.3s]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.15s]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400" />
+      <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm border border-orange-100 bg-white px-4 py-3.5 shadow-sm shadow-orange-900/5">
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-orange-500 [animation-delay:-0.3s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-orange-500 [animation-delay:-0.15s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-orange-500" />
       </div>
     </div>
   );

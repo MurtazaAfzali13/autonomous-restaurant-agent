@@ -1,66 +1,125 @@
 import time
-from datetime import date
+import logging
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
 import httpx
 from supabase import create_client, Client
-from app.config import SUPABASE_URL, SUPABASE_SERVICE_KEY, MAX_MESSAGES_PER_DAY
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+from app.config import (
+    SUPABASE_URL, SUPABASE_SERVICE_KEY, MAX_MESSAGES_PER_DAY,
+    APP_TIMEZONE, RESTAURANT_SUPPORT_PHONE,
+)
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Client lifecycle (lifespan صدا می‌زند؛ موقع import هیچ اتصالی ساخته نمی‌شود)
+# ---------------------------------------------------------------------------
+_client: Client | None = None
+
+
+def init_client() -> None:
+    global _client
+    _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+
+def close_client() -> None:
+    global _client
+    if _client is not None:
+        try:
+            _client.postgrest.session.close()  # httpx.Client زیرین
+        except Exception:
+            logger.debug("Supabase session close failed", exc_info=True)
+        _client = None
+
+
+def sb() -> Client:
+    if _client is None:
+        raise RuntimeError("Supabase client is not initialized (lifespan didn't run).")
+    return _client
+
+
+def ping() -> None:
+    _execute(sb().table("meals").select("id").limit(1))
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+# فقط خطاهایی که مطمئنیم درخواست هنوز اثری نداشته retry می‌شوند (اتصال idle بسته‌شده /
+# اتصال برقرار نشده)؛ ReadTimeout را عمداً retry نمی‌کنیم چون insert ممکن است دوبار ثبت شود.
+_RETRYABLE = (httpx.RemoteProtocolError, httpx.ConnectError)
 
 
 def _execute(query, retries: int = 2):
-    """
-    Supabase's underlying HTTP client keeps connections pooled and reuses them
-    across requests. Occasionally the server has already closed an idle pooled
-    connection, and the next request that reuses it fails with
-    httpx.RemoteProtocolError: Server disconnected. This is a transient network
-    condition, not a broken query — retry a couple of times before giving up.
-    """
     last_err = None
     for attempt in range(retries + 1):
         try:
             return query.execute()
-        except httpx.RemoteProtocolError as e:
+        except _RETRYABLE as e:
             last_err = e
+            logger.warning("Supabase transient error (attempt %d): %s", attempt + 1, type(e).__name__)
             time.sleep(0.3 * (attempt + 1))
     raise last_err
+
+
+def _first(query) -> dict | None:
+    """
+    جایگزین .single(): در supabase-py، .single() وقتی ردیفی نباشد exception پرتاب می‌کند
+    (نه None)، و باعث می‌شد «غذا پیدا نشد» به‌غلط «دیتابیس در دسترس نیست» نمایش داده شود.
+    """
+    res = _execute(query.limit(1))
+    return res.data[0] if res.data else None
+
+
+_TZ = ZoneInfo(APP_TIMEZONE)
+
+
+def today_str() -> str:
+    return datetime.now(_TZ).date().isoformat()
 
 
 # ---------------------------------------------------------------------------
 # Meals / Menu
 # ---------------------------------------------------------------------------
+MENU_LIMIT = 30  # جلوگیری از پر شدن context با منوی خیلی بزرگ
+
 
 def search_meals(category: str | None = None, search_term: str | None = None) -> list[dict]:
-    query = supabase.table("meals").select("id, title, summary, price, category, image")
+    query = sb().table("meals").select("id, title, summary, price, category, image")
     if category:
         query = query.ilike("category", f"%{category}%")
     if search_term:
         query = query.ilike("title", f"%{search_term}%")
-    return _execute(query).data
+    return _execute(query.limit(MENU_LIMIT)).data
 
 
 def get_meal(meal_id: int) -> dict | None:
-    query = supabase.table("meals").select("*").eq("id", meal_id).single()
-    return _execute(query).data
+    return _first(sb().table("meals").select("*").eq("id", meal_id))
 
 
 # ---------------------------------------------------------------------------
-# Cart — همه‌ی عملیات سبد خرید از همین‌جا رد می‌شود، چه چت‌بات چه هر endpoint دیگر.
-# این باعث می‌شود فرانت و چت‌بات هرگز از هم عقب نیفتند.
+# Cart
 # ---------------------------------------------------------------------------
-
 def get_or_create_active_cart(user_id: int) -> dict:
-    query = supabase.table("carts").select("*").eq("user_id", user_id).eq("status", "active")
-    res = _execute(query)
+    # توصیه: در Postgres یک unique partial index بگذارید تا دو درخواست هم‌زمان دو سبد active نسازند:
+    #   create unique index one_active_cart_per_user on carts(user_id) where status = 'active';
+    res = _execute(sb().table("carts").select("*").eq("user_id", user_id).eq("status", "active"))
     if res.data:
         return res.data[0]
-    created = _execute(supabase.table("carts").insert({"user_id": user_id, "status": "active"}))
-    return created.data[0]
+    try:
+        return _execute(sb().table("carts").insert({"user_id": user_id, "status": "active"})).data[0]
+    except Exception as e:
+        if getattr(e, "code", None) == "23505":  # unique index: درخواست هم‌زمان قبلاً ساخته
+            return _execute(sb().table("carts").select("*").eq("user_id", user_id).eq("status", "active")).data[0]
+        raise
 
 
 def get_cart_items(user_id: int) -> list[dict]:
     cart = get_or_create_active_cart(user_id)
     query = (
-        supabase.table("cart_items")
+        sb().table("cart_items")
         .select("id, meal_id, quantity, price, meals(title)")
         .eq("cart_id", cart["id"])
     )
@@ -68,115 +127,107 @@ def get_cart_items(user_id: int) -> list[dict]:
 
 
 def add_cart_item(user_id: int, meal_id: int, quantity: int = 1) -> dict:
+    if quantity < 1 or quantity > 50:
+        raise ValueError("invalid_quantity")
     cart = get_or_create_active_cart(user_id)
     meal = get_meal(meal_id)
     if not meal:
         raise ValueError("meal_not_found")
 
-    existing_query = (
-        supabase.table("cart_items")
-        .select("*")
-        .eq("cart_id", cart["id"])
-        .eq("meal_id", meal_id)
+    existing = _execute(
+        sb().table("cart_items").select("*").eq("cart_id", cart["id"]).eq("meal_id", meal_id)
     )
-    existing = _execute(existing_query)
     if existing.data:
         item = existing.data[0]
         update_query = (
-            supabase.table("cart_items")
+            sb().table("cart_items")
             .update({"quantity": item["quantity"] + quantity})
             .eq("id", item["id"])
         )
-        return _execute(update_query).data[0]
+        row = _execute(update_query).data[0]
+        return {**row, "title": meal["title"], "image": meal.get("image")}
 
-    insert_query = supabase.table("cart_items").insert(
+    insert_query = sb().table("cart_items").insert(
         {"cart_id": cart["id"], "meal_id": meal_id, "quantity": quantity, "price": meal["price"]}
     )
-    return _execute(insert_query).data[0]
+    row = _execute(insert_query).data[0]
+    # title/image برای نمایش کارت غذا در چت (از جدول meals، نه از مدل)
+    return {**row, "title": meal["title"], "image": meal.get("image")}
 
 
 def remove_cart_item(user_id: int, meal_id: int) -> None:
     cart = get_or_create_active_cart(user_id)
-    query = supabase.table("cart_items").delete().eq("cart_id", cart["id"]).eq("meal_id", meal_id)
-    _execute(query)
+    _execute(sb().table("cart_items").delete().eq("cart_id", cart["id"]).eq("meal_id", meal_id))
 
 
 def clear_cart(cart_id: int) -> None:
-    _execute(supabase.table("cart_items").delete().eq("cart_id", cart_id))
+    _execute(sb().table("cart_items").delete().eq("cart_id", cart_id))
 
 
-
+# ---------------------------------------------------------------------------
+# Orders
+# ---------------------------------------------------------------------------
 def create_order_from_cart(user_id: int, customer_name: str, customer_email: str) -> dict:
-    cart = get_or_create_active_cart(user_id)
-    items = get_cart_items(user_id)
-    if not items:
-        raise ValueError("empty_cart")
-
-    total_price = sum(i["price"] * i["quantity"] for i in items)
-
-    order_query = supabase.table("orders").insert({
-        "customer_name": customer_name,
-        "customer_email": customer_email,
-        "total_price": total_price,
-        "status": "pending",
-    })
-    order = _execute(order_query).data[0]
-
-    order_items_payload = [
-        {"order_id": order["id"], "meal_id": i["meal_id"], "quantity": i["quantity"], "price": i["price"]}
-        for i in items
-    ]
-    _execute(supabase.table("order_items").insert(order_items_payload))
-
-    # سبد را خالی و کارت را checked_out می‌کنیم؛ همان لحظه فرانت (Realtime) خالی شدن سبد را می‌بیند
-    clear_cart(cart["id"])
-    _execute(supabase.table("carts").update({"status": "checked_out"}).eq("id", cart["id"]))
-
-    return order
+    """کل عملیات داخل یک Postgres function (تراکنش اتمی) انجام می‌شود؛ migrations/001 را ببینید."""
+    try:
+        res = _execute(sb().rpc("create_order_from_cart", {
+            "p_user_id": user_id,
+            "p_customer_name": customer_name,
+            "p_customer_email": customer_email,
+        }))
+    except Exception as e:
+        if "empty_cart" in str(e):
+            raise ValueError("empty_cart") from e
+        raise
+    return res.data[0] if isinstance(res.data, list) else res.data
 
 
-def get_order(order_id: int) -> dict | None:
-    query = supabase.table("orders").select("*").eq("id", order_id).single()
-    return _execute(query).data
+def get_order_for_user(order_id: int, user_id: int) -> dict | None:
+    """سفارش فقط اگر مال همین کاربر باشد. «وجود ندارد» و «مال دیگری است» یکسان None می‌دهند (جلوگیری از enumeration)."""
+    return _first(sb().table("orders").select("*").eq("id", order_id).eq("user_id", user_id))
 
 
-def get_order_status(order_id: int) -> str | None:
-    order = get_order(order_id)
+def get_order_status(order_id: int, user_id: int) -> str | None:
+    order = get_order_for_user(order_id, user_id)
     return order["status"] if order else None
 
 
-def get_order_with_items(order_id: int) -> dict | None:
-    order = get_order(order_id)
+def get_order_with_items(order_id: int, user_id: int) -> dict | None:
+    order = get_order_for_user(order_id, user_id)
     if not order:
         return None
     query = (
-        supabase.table("order_items")
+        sb().table("order_items")
         .select("id, meal_id, quantity, price, meals(title)")
         .eq("order_id", order_id)
     )
-    items = _execute(query).data
-    return {**order, "items": items}
+    return {**order, "items": _execute(query).data}
 
 
-def list_orders_by_email(customer_email: str) -> list[dict]:
+def list_orders_for_user(user_id: int) -> list[dict]:
     query = (
-        supabase.table("orders")
-        .select("*")
-        .eq("customer_email", customer_email)
+        sb().table("orders").select("*")
+        .eq("user_id", user_id)
         .order("created_at", desc=True)
+        .limit(50)
     )
     return _execute(query).data
 
 
-def cancel_order(order_id: int) -> tuple[bool, str]:
-    from app.config import RESTAURANT_SUPPORT_PHONE
-
-    status = get_order_status(order_id)
-    if status is None:
+def cancel_order(order_id: int, user_id: int) -> tuple[bool, str]:
+    order = get_order_for_user(order_id, user_id)
+    if order is None:
         return False, "No order found with that number."
+    status = order["status"]
     if status == "pending":
-        _execute(supabase.table("orders").update({"status": "cancelled"}).eq("id", order_id))
-        return True, "Your order was cancelled successfully."
+        # شرط status داخل خود update: اگر هم‌زمان cooking شد، لغو نمی‌شود
+        res = _execute(
+            sb().table("orders").update({"status": "cancelled"})
+            .eq("id", order_id).eq("user_id", user_id).eq("status", "pending")
+        )
+        if res.data:
+            return True, "Your order was cancelled successfully."
+        return False, f"The order just moved to preparation. Please contact the restaurant at {RESTAURANT_SUPPORT_PHONE}."
     if status in ("cooking", "completed"):
         return False, (
             "Your order is already being prepared/delivered, so it can't be cancelled automatically. "
@@ -187,51 +238,49 @@ def cancel_order(order_id: int) -> tuple[bool, str]:
     return False, f"Unknown order status: {status}"
 
 
-
+# ---------------------------------------------------------------------------
+# Rooms / Reservations
+# ---------------------------------------------------------------------------
 def search_available_rooms(check_in: str, check_out: str, guests: int = 1) -> list[dict]:
-    rooms_query = (
-        supabase.table("rooms")
+    rooms = _execute(
+        sb().table("rooms")
         .select("id, name, type, summary, price_per_night, capacity, beds, size_m2, view")
         .eq("is_active", True)
         .gte("capacity", guests)
-    )
-    rooms = _execute(rooms_query).data
+        .limit(50)
+    ).data
 
-    # A reservation blocks a room for [check_in, check_out) — two ranges overlap
-    # when existing.check_in < requested.check_out AND existing.check_out > requested.check_in.
-    conflicts_query = (
-        supabase.table("reservations")
+    # [check_in, check_out) overlap: existing.check_in < req.check_out AND existing.check_out > req.check_in
+    conflicts = _execute(
+        sb().table("reservations")
         .select("room_id")
         .in_("status", ["pending", "confirmed", "checked_in"])
         .lt("check_in", check_out)
         .gt("check_out", check_in)
-    )
-    busy_room_ids = {r["room_id"] for r in _execute(conflicts_query).data}
-
-    return [r for r in rooms if r["id"] not in busy_room_ids]
+    ).data
+    busy = {r["room_id"] for r in conflicts}
+    return [r for r in rooms if r["id"] not in busy]
 
 
 def get_room(room_id: int) -> dict | None:
-    query = supabase.table("rooms").select("*").eq("id", room_id).eq("is_active", True).single()
-    return _execute(query).data
+    return _first(sb().table("rooms").select("*").eq("id", room_id).eq("is_active", True))
 
 
-def get_reservation(reservation_id: int) -> dict | None:
-    query = (
-        supabase.table("reservations")
-        .select("*, rooms(name, price_per_night)")
-        .eq("id", reservation_id)
-        .single()
+def get_reservation(reservation_id: int, user_id: int) -> dict | None:
+    """فقط رزرو خود کاربر؛ در غیر این صورت None."""
+    return _first(
+        sb().table("reservations").select("*, rooms(name, price_per_night)")
+        .eq("id", reservation_id).eq("user_id", user_id)
     )
-    return _execute(query).data
 
 
 def get_user_reservations(user_id: int) -> list[dict]:
     query = (
-        supabase.table("reservations")
+        sb().table("reservations")
         .select("*, rooms(name, price_per_night)")
         .eq("user_id", user_id)
         .order("created_at", desc=True)
+        .limit(20)
     )
     return _execute(query).data
 
@@ -240,84 +289,77 @@ def create_reservation(
     user_id: int, room_id: int, check_in: str, check_out: str,
     adults: int = 1, children: int = 0,
 ) -> tuple[dict | None, str | None]:
-    """
-    Same contract as create_order_from_cart: price is always computed here from
-    the room's real price_per_night, never trusted from the caller. Returns
-    (reservation, None) on success or (None, error_message) on a handled failure —
-    it never raises for an expected business-rule failure, only for a genuinely
-    unexpected error (which the calling tool still catches, per our
-    no-tool-ever-raises rule).
-    """
-    from datetime import date as _date
-
     room = get_room(room_id)
     if not room:
         return None, "No room found with that id."
 
     try:
-        nights = (_date.fromisoformat(check_out) - _date.fromisoformat(check_in)).days
+        nights = (date.fromisoformat(check_out) - date.fromisoformat(check_in)).days
+        check_in_date = date.fromisoformat(check_in)
     except ValueError:
         return None, "Dates must be in YYYY-MM-DD format."
 
+    if check_in_date < date.fromisoformat(today_str()):
+        return None, "The check-in date can't be in the past."
     if nights < 1 or nights > 30:
         return None, "The stay must be between 1 and 30 nights."
-    if adults + children > room["capacity"]:
+    if adults < 1 or children < 0 or adults + children > room["capacity"]:
         return None, "The number of guests exceeds this room's capacity."
 
-    total_price = nights * float(room["price_per_night"])
-
-    insert_query = supabase.table("reservations").insert({
+    payload = {
         "user_id": user_id,
         "room_id": room_id,
         "check_in": check_in,
         "check_out": check_out,
         "adults": adults,
         "children": children,
-        "nights": nights,
         "price_per_night": room["price_per_night"],
-        "total_price": total_price,
+        "total_price": nights * float(room["price_per_night"]),
         "status": "pending",
-    })
+    }
+
     try:
-        inserted = _execute(insert_query)
-        return inserted.data[0], None
+        return _execute(sb().table("reservations").insert(payload)).data[0], None
     except Exception as e:
-        # Postgres 23P01 = exclusion constraint violation: someone else booked
-        # this exact overlap in the instant between our availability check and insert.
-        if "23P01" in str(e) or "no_double_booking" in str(e).lower():
+        code = getattr(e, "code", None)
+        logger.error(
+            "create_reservation failed: code=%s message=%s details=%s hint=%s payload=%s",
+            code, getattr(e, "message", None) or str(e), getattr(e, "details", None),
+            getattr(e, "hint", None), payload,
+        )
+        if code == "23P01" or "no_double_booking" in str(e).lower():
             return None, "That date range was just booked by someone else. Please choose different dates."
+        if code == "23503":
+            return None, "Your account couldn't be linked to this booking. Please log in and try again."
+        if code == "428C9":
+            return None, "A reservation column is generated by the database and cannot be set manually."
         return None, f"Couldn't create the reservation right now ({type(e).__name__}). Please try again in a moment."
 
 
-def get_reservation_status(reservation_id: int) -> str | None:
-    reservation = get_reservation(reservation_id)
+def get_reservation_status(reservation_id: int, user_id: int) -> str | None:
+    reservation = get_reservation(reservation_id, user_id)
     return reservation["status"] if reservation else None
 
 
-def cancel_reservation(reservation_id: int) -> tuple[bool, str]:
+def cancel_reservation(reservation_id: int, user_id: int) -> tuple[bool, str]:
     """
-    Cancellation eligibility — the one rule table that governs every cancel,
-    whether triggered by the chatbot or a website button:
-
     status                  | check-in date        | cancellable automatically?
-    -------------------------|-----------------------|---------------------------
-    pending / confirmed      | still in the future   | YES -> becomes "cancelled"
-    pending / confirmed      | today or already past | NO  -> contact the hotel
-    checked_in / completed   | (irrelevant)          | NO  -> contact the hotel
-    cancelled                | (irrelevant)          | NO  -> already cancelled
-    no_show                  | (irrelevant)          | NO  -> already resolved
+    pending / confirmed     | still in the future  | YES -> "cancelled"
+    pending / confirmed     | today or past        | NO  -> contact the hotel
+    checked_in / completed  | (irrelevant)         | NO  -> contact the hotel
+    cancelled / no_show     | (irrelevant)         | NO  -> already resolved
     """
-    from app.config import RESTAURANT_SUPPORT_PHONE
-
-    reservation = get_reservation(reservation_id)
+    reservation = get_reservation(reservation_id, user_id)
     if not reservation:
         return False, "No reservation found with that number."
 
     status = reservation["status"]
-    today = _today()
 
-    if status in ("pending", "confirmed") and reservation["check_in"] > today:
-        _execute(supabase.table("reservations").update({"status": "cancelled"}).eq("id", reservation_id))
+    if status in ("pending", "confirmed") and reservation["check_in"] > today_str():
+        _execute(
+            sb().table("reservations").update({"status": "cancelled"})
+            .eq("id", reservation_id).eq("user_id", user_id).in_("status", ["pending", "confirmed"])
+        )
         return True, "Your reservation was cancelled successfully."
     if status in ("checked_in", "completed"):
         return False, (
@@ -328,7 +370,6 @@ def cancel_reservation(reservation_id: int) -> tuple[bool, str]:
         return False, "This reservation has already been cancelled."
     if status == "no_show":
         return False, "This reservation was already marked as a no-show and can't be cancelled."
-    # pending/confirmed but check-in is today or already in the past
     return False, (
         "This reservation's check-in date has already passed or is today, so it can't be cancelled automatically. "
         f"Please contact the hotel directly at {RESTAURANT_SUPPORT_PHONE}."
@@ -336,64 +377,25 @@ def cancel_reservation(reservation_id: int) -> tuple[bool, str]:
 
 
 # ---------------------------------------------------------------------------
-# Conversation / message-limit — سقف ۱۰ پیام در روز، جدا برای هر کاربر
-#
-# جداسازی کاربران: thread_id همیشه برابر str(user_id) است (در routers/chat.py ساخته می‌شود)
-# و conversations.thread_id کلید اصلی جدول است — پس هر کاربر دقیقاً یک ردیف مخصوص خودش
-# دارد و هرگز شمارنده یا حافظه‌اش با کاربر دیگر قاطی نمی‌شود. LangGraph هم با همین
-# thread_id تاریخچه‌ی چت را جدا نگه می‌دارد (chat_memory.db)، و سبد خرید هم بر اساس همین
-# user_id از هم جدا است (get_or_create_active_cart). یعنی سه isolation مستقل — پیام‌شمار
-# روزانه، حافظه‌ی گفتگو، و سبد خرید — همه کلیدشان user_id/thread_id است.
+# Daily message cap (اتمی، سمت دیتابیس؛ هیچ مسیر ریستی وجود ندارد)
 # ---------------------------------------------------------------------------
-
-def _today() -> str:
-    return date.today().isoformat()
-
-
-def get_or_create_conversation(thread_id: str, user_id: int) -> dict:
-    query = supabase.table("conversations").select("*").eq("thread_id", thread_id)
-    res = _execute(query)
-    if res.data:
-        return res.data[0]
-    insert_query = supabase.table("conversations").insert(
-        {"thread_id": thread_id, "user_id": user_id, "message_count": 0, "message_date": _today()}
-    )
-    return _execute(insert_query).data[0]
-
-
-def get_conversation_for_today(thread_id: str, user_id: int) -> dict:
+def consume_daily_message(user_id: int) -> int:
     """
-    گفتگوی «امروزِ» این کاربر را برمی‌گرداند. اگر آخرین باری که پیام فرستاده بود
-    روز دیگری بوده، شمارنده را خودکار صفر و وضعیت را open می‌کند — یعنی سقف واقعاً
-    روزانه است، نه یک‌بار برای همیشه.
+    یک پیام از سهمیه‌ی امروز کم می‌کند. برمی‌گرداند: تعداد مصرف‌شده‌ی امروز (۱..سقف)،
+    یا -1 اگر سقف پر باشد. منطق در Postgres function است تا درخواست‌های هم‌زمان نتوانند دورش بزنند.
     """
-    convo = get_or_create_conversation(thread_id, user_id)
-    if convo["message_date"] != _today():
-        update_query = (
-            supabase.table("conversations")
-            .update({"message_count": 0, "status": "open", "message_date": _today()})
-            .eq("thread_id", thread_id)
-        )
-        convo = _execute(update_query).data[0]
-    return convo
+    res = _execute(sb().rpc("consume_daily_message", {
+        "p_user_id": user_id,
+        "p_today": today_str(),
+        "p_limit": MAX_MESSAGES_PER_DAY,
+    }))
+    return int(res.data)
 
 
-def register_user_message(thread_id: str, user_id: int) -> dict:
-    """هر بار که پیام کاربر می‌رسد صدا زده می‌شود؛ اگر از سقف امروز رد شد، status به limited می‌رود."""
-    convo = get_conversation_for_today(thread_id, user_id)
-    new_count = convo["message_count"] + 1
-    new_status = "limited" if new_count >= MAX_MESSAGES_PER_DAY else convo["status"]
-    update_query = (
-        supabase.table("conversations")
-        .update({"message_count": new_count, "status": new_status})
-        .eq("thread_id", thread_id)
+def get_daily_count(user_id: int) -> int:
+    """تعداد پیام‌های مصرف‌شده‌ی امروز (فقط خواندن؛ برای نمایش وضعیت سقف هنگام بازگردانی گفتگو)."""
+    row = _first(
+        sb().table("daily_usage").select("message_count")
+        .eq("user_id", user_id).eq("usage_date", today_str())
     )
-    return _execute(update_query).data[0]
-
-
-def reset_conversation(thread_id: str) -> None:
-    """ریست دستی (دکمه «گفتگوی جدید» در فرانت) — سقف روزانه باز هم مستقل از این خودکار اعمال می‌شود."""
-    query = supabase.table("conversations").update(
-        {"message_count": 0, "status": "open", "message_date": _today()}
-    ).eq("thread_id", thread_id)
-    _execute(query)
+    return int(row["message_count"]) if row else 0

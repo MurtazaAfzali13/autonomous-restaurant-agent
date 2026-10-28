@@ -1,15 +1,20 @@
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolCallId
 from langchain_core.messages import ToolMessage
+from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from app import db
+
+UserId = Annotated[int, InjectedState("user_id")]
+CustomerName = Annotated[str, InjectedState("customer_name")]
+CustomerEmail = Annotated[str, InjectedState("customer_email")]
 
 
 @tool
 def request_checkout(
-    user_id: int,
-    customer_name: str,
-    customer_email: str,
+    user_id: UserId,
+    customer_name: CustomerName,
+    customer_email: CustomerEmail,
     tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:
     """
@@ -17,8 +22,7 @@ def request_checkout(
     This does NOT place the order itself and does NOT pause the graph — it only
     records that checkout was requested. The actual yes/no pause (HITL) happens
     right after, in a dedicated graph node (confirm_checkout_node), never inside
-    this tool. That separation is what keeps the chat history from getting
-    corrupted, even if the model calls another tool in the same turn.
+    this tool.
     """
     try:
         items = db.get_cart_items(user_id)
@@ -51,10 +55,10 @@ def request_checkout(
 
 
 @tool
-def check_order_status(order_id: int) -> str:
-    """Check the current status of an order by its order number."""
+def check_order_status(order_id: int, user_id: UserId) -> str:
+    """Check the current status of one of the user's own orders by its order number."""
     try:
-        status = db.get_order_status(order_id)
+        status = db.get_order_status(order_id, user_id)
     except Exception as e:
         return f"Couldn't reach the database to check that order right now ({type(e).__name__}). Please try again in a moment."
     if status is None:
@@ -69,14 +73,14 @@ def check_order_status(order_id: int) -> str:
 
 
 @tool
-def cancel_order(order_id: int) -> str:
+def cancel_order(order_id: int, user_id: UserId) -> str:
     """
-    Request to cancel an order. Succeeds while the order is still pending.
+    Request to cancel one of the user's own orders. Succeeds while the order is still pending.
     If it's already cooking or completed, automatic cancellation isn't possible and
     the customer is pointed to contact the restaurant's support line directly.
     """
     try:
-        _, message = db.cancel_order(order_id)
+        _, message = db.cancel_order(order_id, user_id)
         return message
     except Exception as e:
         return f"Couldn't reach the database to cancel that order right now ({type(e).__name__}). Please try again in a moment."

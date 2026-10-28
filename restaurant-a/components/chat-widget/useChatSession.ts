@@ -2,14 +2,8 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type {
-  ChatApiResponse,
-  ChatMessage,
-  ChatUser,
-  PendingInterrupt,
-} from "./types";
-
-const API_BASE = process.env.NEXT_PUBLIC_CHAT_API_URL ?? "http://127.0.0.1:8000";
+import { sendChat, fetchHistory, deleteHistory, DailyLimitError } from "@/lib/backend-client";
+import type { ChatApiResponse, ChatCard, ChatMessage, PendingInterrupt } from "./types";
 
 const TYPEWRITER_MS_PER_CHAR = 12;
 
@@ -19,19 +13,23 @@ function uid() {
 
 type Status = "idle" | "thinking" | "limited" | "error";
 
-export function useChatSession(user: ChatUser) {
+// هویت کاربر دیگر از فرانت فرستاده نمی‌شود؛ بک‌اند آن را از JWT می‌خواند.
+export function useChatSession() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<Status>("idle");
+  const [restoring, setRestoring] = useState(false);
   const [pendingCheckout, setPendingCheckout] = useState<PendingInterrupt | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const typewriterTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const restoredRef = useRef(false);
 
   const appendMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
   }, []);
-  const streamAssistantText = useCallback((fullText: string) => {
+
+  const streamAssistantText = useCallback((fullText: string, cards?: ChatCard[]) => {
     const id = uid();
-    appendMessage({ id, role: "assistant", content: "", isStreaming: true, createdAt: Date.now() });
+    appendMessage({ id, role: "assistant", content: "", cards, isStreaming: true, createdAt: Date.now() });
 
     let i = 0;
     if (typewriterTimer.current) clearInterval(typewriterTimer.current);
@@ -51,14 +49,42 @@ export function useChatSession(user: ChatUser) {
     (data: ChatApiResponse) => {
       if (data.type === "interrupt") {
         setPendingCheckout(data.data);
-        streamAssistantText(data.data.question);
+        streamAssistantText(data.data.question, data.cards);
       } else {
         setPendingCheckout(null);
-        streamAssistantText(data.content);
+        streamAssistantText(data.content, data.cards);
       }
     },
     [streamAssistantText]
   );
+
+  /** گفتگوی ذخیره‌شده‌ی سرور را برمی‌گرداند (فقط یک بار؛ اگر شکست بخورد دفعه‌ی بعد دوباره تلاش می‌شود). */
+  const restore = useCallback(async () => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    setRestoring(true);
+    try {
+      const h = await fetchHistory();
+      setMessages(
+        h.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          cards: m.cards?.length ? m.cards : undefined,
+          createdAt: 0, // زمان واقعی پیام‌های قدیمی ذخیره نشده؛ نمایش داده نمی‌شود
+        }))
+      );
+      setPendingCheckout(h.pending);
+      if (h.remaining <= 0) setStatus("limited");
+    } catch (err) {
+      restoredRef.current = false;
+      if (!(err instanceof Error && err.message === "NOT_LOGGED_IN")) {
+        setErrorText("Couldn't load your previous conversation.");
+      }
+    } finally {
+      setRestoring(false);
+    }
+  }, []);
 
   const send = useCallback(
     async (text: string, resume = false) => {
@@ -71,44 +97,31 @@ export function useChatSession(user: ChatUser) {
       setStatus("thinking");
 
       try {
-        const res = await fetch(`${API_BASE}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: user.id,
-            customer_name: user.name,
-            customer_email: user.email,
-            message: text,
-            resume,
-          }),
-        });
-
-        if (res.status === 429) {
+        const data = (await sendChat(text, resume)) as ChatApiResponse;
+        handleApiResponse(data);
+        window.dispatchEvent(new Event("cart:refresh"));
+        setStatus("idle");
+      } catch (err) {
+        if (err instanceof DailyLimitError) {
           setStatus("limited");
           appendMessage({
             id: uid(),
             role: "system",
-            content: "The message limit for this conversation has been reached. To continue, start a new conversation.",
+            content: "You've reached today's message limit. Please come back tomorrow.",
             createdAt: Date.now(),
           });
           return;
         }
-
-        if (!res.ok) {
-          throw new Error(`Server error (${res.status})`);
-        }
-
-        const data: ChatApiResponse = await res.json();
-        handleApiResponse(data);
-        setStatus("idle");
-      } catch (err) {
         setStatus("error");
-        setErrorText(err instanceof Error ? err.message : "Could not connect to the server.");
+        if (err instanceof Error && err.message === "NOT_LOGGED_IN") {
+          setErrorText("Please log in to use the assistant.");
+        } else {
+          setErrorText(err instanceof Error ? err.message : "Could not connect to the server.");
+        }
       }
     },
-    [appendMessage, handleApiResponse, user]
+    [appendMessage, handleApiResponse]
   );
-
 
   const resolveCheckout = useCallback(
     (confirmed: boolean) => {
@@ -125,23 +138,29 @@ export function useChatSession(user: ChatUser) {
     [appendMessage, send]
   );
 
+  /** گفتگوی جدید: حافظه‌ی چت روی سرور پاک می‌شود. سقف روزانه‌ی پیام ریست نمی‌شود. */
   const resetConversation = useCallback(async () => {
     try {
-      await fetch(`${API_BASE}/chat/reset?thread_id=${user.id}`, { method: "POST" });
+      await deleteHistory();
     } catch {
+      setErrorText("Couldn't clear the conversation. Please try again.");
+      return;
     }
+    if (typewriterTimer.current) clearInterval(typewriterTimer.current);
     setMessages([]);
     setPendingCheckout(null);
     setErrorText(null);
-    setStatus("idle");
-  }, [user.id]);
+    setStatus((s) => (s === "limited" ? s : "idle"));
+  }, []);
 
   return {
     messages,
     status,
+    restoring,
     pendingCheckout,
     errorText,
     send,
+    restore,
     resolveCheckout,
     resetConversation,
   };
