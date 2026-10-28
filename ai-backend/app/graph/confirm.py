@@ -3,12 +3,15 @@ from langgraph.types import interrupt
 from app.graph.state import AgentState
 from app import db
 
+_YES = ("yes", "y", "confirm", "بله", "آره", "تایید")
+
 
 def confirm_checkout_node(state: AgentState):
     """
-    این نود فقط وقتی اجرا می‌شود که request_checkout در نود tools کامل و commit شده باشد
-    (یعنی ToolMessage آن ابزار از قبل ثبت شده). پس interrupt() اینجا همیشه در یک task
-    مستقل و تک‌منظوره اتفاق می‌افتد — هرگز در کنار یک tool_call دیگرِ حل‌نشده.
+    فقط وقتی اجرا می‌شود که request_checkout در نود tools کامل commit شده باشد؛ پس interrupt()
+    همیشه در یک task مستقل و تک‌منظوره است.
+    چون گفتگو ماندگار است، کاربر ممکن است ساعت‌ها بعد «yes» بزند. قبل از ثبت، سبد زنده با همان
+    چیزی که کاربر تایید کرده مقایسه می‌شود؛ اگر فرق کند سفارشی ثبت نمی‌شود.
     """
     pending = state["pending_checkout"]
 
@@ -19,19 +22,34 @@ def confirm_checkout_node(state: AgentState):
         "question": f"Your cart:\n{pending['summary']}\nTotal: ${pending['total']}\nShall I place the order? (yes/no)",
     })
 
-    if str(user_response).strip().lower() in ("yes", "y", "confirm", "بله", "آره", "تایید"):
+    last_order_id = state.get("last_order_id")
+    if str(user_response).strip().lower() in _YES:
         try:
-            order = db.create_order_from_cart(
-                pending["user_id"], pending["customer_name"], pending["customer_email"]
+            live_items = db.get_cart_items(pending["user_id"])
+            live_lines = [f"- {i['meals']['title']} × {i['quantity']}" for i in live_items]
+            live_total = sum(i["price"] * i["quantity"] for i in live_items)
+            # ترتیب ردیف‌ها در دیتابیس تضمین‌شده نیست؛ پس مرتب‌شده مقایسه می‌کنیم.
+            changed = (
+                sorted(live_lines) != sorted(pending["summary"].splitlines())
+                or abs(float(live_total) - float(pending["total"])) > 0.005
             )
-            content = f"🎉 Order placed! Your order number is: {order['id']}"
-            last_order_id = order["id"]
+            if changed:
+                content = (
+                    "Your cart changed after I asked you to confirm, so I did not place the order. "
+                    "Please review your cart and ask me to check out again."
+                )
+            else:
+                order = db.create_order_from_cart(
+                    pending["user_id"], pending["customer_name"], pending["customer_email"]
+                )
+                content = f"🎉 Order placed! Your order number is: {order['id']}"
+                last_order_id = order["id"]
+        except ValueError:
+            content = "Your cart is empty now, so there is nothing to order."
         except Exception as e:
             content = f"Couldn't place the order right now due to a database issue ({type(e).__name__}). Please try again in a moment."
-            last_order_id = state.get("last_order_id")
     else:
         content = "Checkout cancelled. Your cart was left untouched."
-        last_order_id = state.get("last_order_id")
 
     return {
         "messages": [AIMessage(content=content)],
@@ -42,9 +60,8 @@ def confirm_checkout_node(state: AgentState):
 
 def confirm_room_booking_node(state: AgentState):
     """
-    همان الگوی confirm_checkout_node، برای رزرو اتاق. فقط بعد از این‌که
-    request_room_booking در نود tools کامل commit شده اجرا می‌شود، پس اینجا هم
-    interrupt() همیشه در یک task مستقل و تک‌منظوره است.
+    همان الگو برای رزرو اتاق. قبل از ثبت، قیمت زنده‌ی اتاق با مبلغی که کاربر تایید کرده مقایسه می‌شود
+    (تداخل تاریخ را خود دیتابیس با constraint جلوگیری می‌کند).
     """
     pending = state["pending_room_booking"]
 
@@ -62,30 +79,34 @@ def confirm_room_booking_node(state: AgentState):
         ),
     })
 
-    if str(user_response).strip().lower() in ("yes", "y", "confirm", "بله", "آره", "تایید"):
+    last_reservation_id = state.get("last_reservation_id")
+    if str(user_response).strip().lower() in _YES:
         try:
-            reservation, error = db.create_reservation(
-                pending["user_id"],
-                pending["room_id"],
-                pending["check_in"],
-                pending["check_out"],
-                pending["adults"],
-                pending["children"],
-            )
+            room = db.get_room(pending["room_id"])
+            if not room:
+                content = "❌ This room is no longer available."
+            elif abs(pending["nights"] * float(room["price_per_night"]) - float(pending["total"])) > 0.005:
+                content = (
+                    "The room's price changed after I asked you to confirm, so I did not book it. "
+                    "Please ask me to book again to see the new total."
+                )
+            else:
+                reservation, error = db.create_reservation(
+                    pending["user_id"], pending["room_id"], pending["check_in"],
+                    pending["check_out"], pending["adults"], pending["children"],
+                )
+                if error:
+                    content = f"❌ {error}"
+                else:
+                    content = (
+                        f"🎉 Booking requested! Your reservation number is: {reservation['id']} "
+                        f"(pending confirmation from our staff)."
+                    )
+                    last_reservation_id = reservation["id"]
         except Exception as e:
-            reservation, error = None, f"a database issue ({type(e).__name__})"
-        if error:
-            content = f"❌ {error}"
-            last_reservation_id = state.get("last_reservation_id")
-        else:
-            content = (
-                f"🎉 Booking requested! Your reservation number is: {reservation['id']} "
-                f"(pending confirmation from our staff)."
-            )
-            last_reservation_id = reservation["id"]
+            content = f"❌ a database issue ({type(e).__name__})"
     else:
         content = "Booking cancelled. No dates were held for you."
-        last_reservation_id = state.get("last_reservation_id")
 
     return {
         "messages": [AIMessage(content=content)],

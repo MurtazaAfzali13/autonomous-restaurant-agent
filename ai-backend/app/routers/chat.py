@@ -7,7 +7,9 @@ from langgraph.types import Command
 
 from app import db
 from app.auth import CurrentUser, get_current_user
-from app.config import GRAPH_RECURSION_LIMIT, MAX_MESSAGES_PER_DAY
+from app.config import GRAPH_RECURSION_LIMIT, MAX_MESSAGES_PER_DAY, MAX_STORED_TURNS
+from app.graph.cards import collect_turn_cards
+from app.graph.history import build_history, prune_state
 from app.models.chat import ChatRequest
 
 logger = logging.getLogger(__name__)
@@ -55,7 +57,7 @@ async def chat(req: ChatRequest, request: Request, user: CurrentUser = Depends(g
                 result = await asyncio.to_thread(graph.invoke, Command(resume=req.message), config)
             else:
                 if pending is not None:
-                    return {"type": "interrupt", "data": pending}
+                    return {"type": "interrupt", "data": pending, "cards": []}
 
                 used = await asyncio.to_thread(db.consume_daily_message, user.id)
                 if used == -1:
@@ -76,6 +78,13 @@ async def chat(req: ChatRequest, request: Request, user: CurrentUser = Depends(g
                     },
                     config,
                 )
+
+            # گفتگوی ماندگار نباید بی‌نهایت بزرگ شود؛ نوبت‌های خیلی قدیمی از checkpointer پاک می‌شوند.
+            if "__interrupt__" not in result:
+                try:
+                    await asyncio.to_thread(prune_state, graph, config, MAX_STORED_TURNS)
+                except Exception:
+                    logger.warning("prune_state failed for user %s", user.id, exc_info=True)
         except HTTPException:
             raise
         except Exception:
@@ -83,9 +92,50 @@ async def chat(req: ChatRequest, request: Request, user: CurrentUser = Depends(g
             logger.exception("chat failed for user %s", user.id)
             raise HTTPException(status_code=503, detail="الان نمی‌توانم پاسخ بدهم. لطفاً چند لحظه بعد دوباره تلاش کنید.")
 
+    # کارت‌های UI (عکس غذا و ...) فقط برای پیام جدید؛ resume فقط تایید yes/no است.
+    cards = [] if req.resume else collect_turn_cards(result.get("messages", []))
+    logger.info("chat reply user=%s resume=%s cards=%d", user.id, req.resume, len(cards))
+
     if "__interrupt__" in result:
-        return {"type": "interrupt", "data": result["__interrupt__"][0].value, "remaining": remaining}
+        return {"type": "interrupt", "data": result["__interrupt__"][0].value, "remaining": remaining, "cards": cards}
 
-    return {"type": "message", "content": result["messages"][-1].content, "remaining": remaining}
+    return {"type": "message", "content": result["messages"][-1].content, "remaining": remaining, "cards": cards}
 
 
+@router.get("/history")
+async def get_history(request: Request, user: CurrentUser = Depends(get_current_user)):
+    """گفتگوی ذخیره‌شده‌ی کاربر (برای ادامه‌ی گفتگو بعد از بستن تب یا ری‌استارت سرور) + تاییدیه‌ی در انتظار."""
+    graph = request.app.state.graph
+    config = {"configurable": {"thread_id": str(user.id)}}
+    try:
+        snapshot = await asyncio.to_thread(graph.get_state, config)
+        used = await asyncio.to_thread(db.get_daily_count, user.id)
+    except Exception:
+        logger.exception("history failed for user %s", user.id)
+        raise HTTPException(status_code=503, detail="Couldn't load the conversation right now.")
+
+    pending = _pending_interrupt(snapshot)
+    messages = (snapshot.values or {}).get("messages", [])
+    return {
+        "messages": build_history(messages, pending),
+        "pending": pending,
+        "remaining": max(MAX_MESSAGES_PER_DAY - used, 0),
+    }
+
+
+@router.delete("/history")
+async def clear_history(request: Request, user: CurrentUser = Depends(get_current_user)):
+    """
+    «گفتگوی جدید»: فقط حافظه‌ی چت (checkpointer) پاک می‌شود.
+    سبد، سفارش‌ها، رزروها و سهمیه‌ی روزانه‌ی پیام (جدول daily_usage) دست‌نخورده می‌مانند،
+    پس این مسیر راهی برای دور زدن سقف ۱۰ پیام نیست.
+    """
+    thread_id = str(user.id)
+    delete_thread = getattr(request.app.state.graph.checkpointer, "delete_thread", None)
+    if delete_thread is None:
+        raise HTTPException(status_code=501, detail="Upgrade langgraph-checkpoint-sqlite to enable clearing.")
+    async with _thread_lock(thread_id):  # صبر می‌کند تا درخواست در حال اجرا تمام شود
+        await asyncio.to_thread(delete_thread, thread_id)
+    return {"status": "ok"}
+
+# عمداً endpoint ی برای ریست سقف پیام وجود ندارد.

@@ -16,7 +16,7 @@ interface Props {
 }
 
 export function ChatModal({ open, onClose, session }: Props) {
-  const { messages, status, pendingCheckout, errorText, send, resolveCheckout, resetConversation } = session;
+  const { messages, status, restoring, pendingCheckout, errorText, send, resolveCheckout, resetConversation } = session;
   const [input, setInput] = useState("");
   const [entered, setEntered] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
@@ -37,8 +37,16 @@ export function ChatModal({ open, onClose, session }: Props) {
   if (!open) return null;
 
   const isThinking = status === "thinking";
+  const isBusy = isThinking || restoring;
   const isLimited = status === "limited";
-  const canSend = input.trim().length > 0 && !isThinking && !pendingCheckout && !isLimited;
+  const canSend = input.trim().length > 0 && !isBusy && !pendingCheckout && !isLimited;
+
+  // «گفتگوی جدید» حافظه‌ی چت را روی سرور پاک می‌کند؛ سبد، رزروها و سهمیه‌ی روزانه تغییر نمی‌کنند.
+  const handleClear = () => {
+    if (isBusy) return;
+    if (messages.length > 0 && !window.confirm("Delete this conversation? Your cart, orders and bookings are not affected.")) return;
+    void resetConversation();
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,8 +65,10 @@ export function ChatModal({ open, onClose, session }: Props) {
         className="absolute inset-0 bg-stone-900/50 backdrop-blur-sm pointer-events-auto sm:bg-transparent sm:backdrop-blur-none sm:pointer-events-none"
       />
 
+      {/* کل مودال چپ‌به‌راست (LTR) است؛ همه‌ی فرزندان این جهت را ارث می‌برند */}
       <div
-        dir="rtl"
+        dir="ltr"
+        lang="en"
         className={`
           relative z-10 flex h-[88vh] w-full flex-col overflow-hidden
           rounded-t-3xl border border-orange-200/70 bg-[#FFF8F0] shadow-2xl shadow-orange-900/25
@@ -79,7 +89,7 @@ export function ChatModal({ open, onClose, session }: Props) {
               <Sparkles className="h-4 w-4 text-white" />
               <span className="absolute -bottom-0.5 -left-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-[#FFF8F0]" />
             </span>
-            <p className="text-sm font-semibold text-stone-800">Intelegent Assistant</p>
+            <p className="text-sm font-semibold text-stone-800">Intelligent Assistant</p>
           </div>
           <div className="flex items-center gap-1">
             <div className="relative">
@@ -91,13 +101,14 @@ export function ChatModal({ open, onClose, session }: Props) {
                 <Info className="h-4 w-4" />
               </button>
               {showInfo && (
-                <div className="absolute left-0 top-9 z-20 w-56 rounded-xl border border-orange-100 bg-white p-3 text-xs leading-relaxed text-stone-600 shadow-xl shadow-orange-900/10">
+                // در LTR دکمه‌ی Info سمت راست هدر است؛ پاپ‌آپ باید از لبه‌ی راست باز شود تا از مودال بیرون نزند
+                <div className="absolute right-0 top-9 z-20 w-56 rounded-xl border border-orange-100 bg-white p-3 text-left text-xs leading-relaxed text-stone-600 shadow-xl shadow-orange-900/10">
                   I can show you the menu and help you place food orders, as well as find and book available hotel rooms — and I'll keep you updated on the status of each.
                 </div>
               )}
             </div>
             <button
-              onClick={() => void resetConversation()}
+              onClick={handleClear}
               title="Clear chat"
               className="rounded-lg p-1.5 text-stone-500 transition hover:bg-orange-100 hover:text-orange-700"
             >
@@ -115,7 +126,7 @@ export function ChatModal({ open, onClose, session }: Props) {
 
         {/* لیست پیام‌ها */}
         <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-          {messages.length === 0 && (
+          {messages.length === 0 && !restoring && (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-100">
                 <Sparkles className="h-5 w-5 text-orange-500" />
@@ -147,7 +158,7 @@ export function ChatModal({ open, onClose, session }: Props) {
             />
           )}
 
-          {isThinking && <TypingIndicator />}
+          {isBusy && <TypingIndicator />}
 
           {errorText && (
             <div className="mx-auto max-w-[85%] rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-center text-xs text-red-700">
@@ -163,14 +174,14 @@ export function ChatModal({ open, onClose, session }: Props) {
               Daily message limit reached. Please come back tomorrow.
             </div>
           ) : (
-            // dir="ltr" فقط روی همین ردیف: ورودی چپ، دکمه‌ی ارسال راست. بقیه‌ی مودال همچنان rtl است.
-            <form onSubmit={handleSubmit} dir="ltr" className="flex items-center gap-2">
+            // کل مودال LTR است: ورودی چپ، دکمه‌ی ارسال راست
+            <form onSubmit={handleSubmit} className="flex items-center gap-2">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                dir="auto"
+                dir="ltr"
                 placeholder={pendingCheckout ? "Please select from the buttons above" : "Type your message..."}
-                disabled={isThinking || !!pendingCheckout}
+                disabled={isBusy || !!pendingCheckout}
                 className="
                   flex-1 rounded-full border border-orange-200 bg-white px-4 py-2.5
                   text-sm text-stone-800 placeholder:text-stone-400
@@ -198,20 +209,20 @@ export function ChatModal({ open, onClose, session }: Props) {
           <div className="mt-2.5 flex items-center gap-2">
             <button
               type="button"
-              disabled={isThinking || !!pendingCheckout || isLimited}
+              disabled={isBusy || !!pendingCheckout || isLimited}
               onClick={() => void send("What's in my shopping cart?")}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-orange-200 bg-white py-2 text-xs text-stone-600 transition hover:bg-orange-50 disabled:opacity-40"
             >
               <ShoppingBag className="h-3.5 w-3.5" />
-              سبد خرید
+              Shopping cart
             </button>
             <button
               type="button"
-              onClick={() => void resetConversation()}
+              onClick={handleClear}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-orange-200 bg-white py-2 text-xs text-stone-600 transition hover:bg-orange-50"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              clear chat
+              Clear chat
             </button>
           </div>
         </div>

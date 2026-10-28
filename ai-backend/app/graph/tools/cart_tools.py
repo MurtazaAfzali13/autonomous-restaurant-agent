@@ -3,27 +3,34 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from app import db
 
-# user_id با InjectedState از state گراف (که سرور از توکن پر کرده) می‌آید؛
-# در schema ابزار برای مدل دیده نمی‌شود و مدل نمی‌تواند مقدارش را تعیین کند.
 UserId = Annotated[int, InjectedState("user_id")]
 
-
-@tool
-def add_to_cart(user_id: UserId, meal_id: int, quantity: int = 1) -> str:
+@tool(response_format="content_and_artifact")
+def add_to_cart(user_id: UserId, meal_id: int, quantity: int = 1) -> tuple[str, dict | None]:
     """
     Add a meal to the user's cart. Written directly to the cart_items table
     (not graph memory), so the frontend picks it up instantly via Supabase Realtime.
     """
     try:
         item = db.add_cart_item(user_id, meal_id, quantity)
-        return f"Added {quantity} to the cart (row id: {item['id']})."
+        content = f"Added {quantity} × {item['title']} to the cart ({item['quantity']} of it now in the cart)."
+        card = {
+            "type": "cart_item_added",
+            "meal_id": meal_id,
+            "title": item["title"],
+            "image": item.get("image"),
+            "price": item["price"],
+            "quantity_added": quantity,
+            "quantity_in_cart": item["quantity"],
+        }
+        return content, card
     except ValueError as e:
         if str(e) == "invalid_quantity":
-            return "Quantity must be between 1 and 50."
-        return "No meal found with that id."
+            return "Quantity must be between 1 and 50.", None
+        return "No meal found with that id.", None
     except Exception as e:
         # هر ابزار باید همیشه متن برگرداند، نه exception؛ وگرنه tool_call بی‌پاسخ می‌ماند و تاریخچه خراب می‌شود.
-        return f"Couldn't reach the database to update the cart right now ({type(e).__name__}). Please try again in a moment."
+        return f"Couldn't reach the database to update the cart right now ({type(e).__name__}). Please try again in a moment.", None
 
 
 @tool

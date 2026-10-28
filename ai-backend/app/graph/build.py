@@ -7,11 +7,6 @@ from app.graph.tools import TOOLS
 
 
 def route_after_tools(state: AgentState) -> str:
-    """
-    اگر request_checkout یا request_room_booking در همین نوبت صدا زده شده باشد،
-    به نود confirm مربوطه برو تا interrupt() مستقل اجرا شود؛ وگرنه برگرد به agent.
-    (با parallel_tool_calls=False این دو هرگز هم‌زمان پر نمی‌شوند.)
-    """
     if state.get("pending_checkout"):
         return "confirm_checkout"
     if state.get("pending_room_booking"):
@@ -20,7 +15,6 @@ def route_after_tools(state: AgentState) -> str:
 
 
 def build_graph(checkpointer):
-    """گراف را با checkpointer‌ای که lifespan ساخته کامپایل می‌کند (بدون اتصال در سطح ماژول)."""
     graph = StateGraph(AgentState)
     graph.add_node("agent", agent_node)
     graph.add_node("tools", ToolNode(TOOLS))
@@ -38,3 +32,6 @@ def build_graph(checkpointer):
     graph.add_edge("confirm_room_booking", END)
 
     return graph.compile(checkpointer=checkpointer)
+    
+
+

@@ -144,12 +144,15 @@ def add_cart_item(user_id: int, meal_id: int, quantity: int = 1) -> dict:
             .update({"quantity": item["quantity"] + quantity})
             .eq("id", item["id"])
         )
-        return _execute(update_query).data[0]
+        row = _execute(update_query).data[0]
+        return {**row, "title": meal["title"], "image": meal.get("image")}
 
     insert_query = sb().table("cart_items").insert(
         {"cart_id": cart["id"], "meal_id": meal_id, "quantity": quantity, "price": meal["price"]}
     )
-    return _execute(insert_query).data[0]
+    row = _execute(insert_query).data[0]
+    # title/image برای نمایش کارت غذا در چت (از جدول meals، نه از مدل)
+    return {**row, "title": meal["title"], "image": meal.get("image")}
 
 
 def remove_cart_item(user_id: int, meal_id: int) -> None:
@@ -387,3 +390,12 @@ def consume_daily_message(user_id: int) -> int:
         "p_limit": MAX_MESSAGES_PER_DAY,
     }))
     return int(res.data)
+
+
+def get_daily_count(user_id: int) -> int:
+    """تعداد پیام‌های مصرف‌شده‌ی امروز (فقط خواندن؛ برای نمایش وضعیت سقف هنگام بازگردانی گفتگو)."""
+    row = _first(
+        sb().table("daily_usage").select("message_count")
+        .eq("user_id", user_id).eq("usage_date", today_str())
+    )
+    return int(row["message_count"]) if row else 0

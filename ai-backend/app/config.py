@@ -21,6 +21,9 @@ MAX_CONTEXT_TURNS: int = int(os.environ.get("MAX_CONTEXT_TURNS", 4))
 # سقف مراحل agent<->tools در یک درخواست (جلوگیری از حلقه‌ی بی‌پایان ابزار)
 GRAPH_RECURSION_LIMIT: int = int(os.environ.get("GRAPH_RECURSION_LIMIT", 12))
 
+# تعداد نوبت‌هایی که در checkpointer نگه داشته می‌شود (برای «ادامه‌ی گفتگو»). قدیمی‌تر پاک می‌شود تا فایل بزرگ نشود.
+MAX_STORED_TURNS: int = int(os.environ.get("MAX_STORED_TURNS", 30))
+
 # --- محدودیت گفتگو ---
 MAX_MESSAGES_PER_DAY: int = int(os.environ.get("MAX_MESSAGES_PER_DAY", 10))
 

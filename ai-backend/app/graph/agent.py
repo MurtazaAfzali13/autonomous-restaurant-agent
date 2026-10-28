@@ -34,6 +34,8 @@ You only see the most recent part of the conversation; if you need a detail from
 Food ordering rules:
 - Before add_to_cart, always use search_menu first to find the exact meal id.
 - Use view_cart to see the cart; never guess its contents.
+- When add_to_cart succeeds, the app automatically shows the user a card with the meal's photo, name
+  and quantity. Confirm in ONE short sentence and do not repeat those details or mention images.
 - Only call request_checkout when the user explicitly says to place/finalize the order.
 - For a cancellation request, first check the order's status with check_order_status, then
   call cancel_order and return its exact message to the user verbatim (especially when the

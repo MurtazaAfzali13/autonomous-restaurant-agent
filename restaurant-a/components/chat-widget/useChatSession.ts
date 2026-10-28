@@ -2,8 +2,8 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { sendChat, DailyLimitError } from "@/lib/backend-client";
-import type { ChatApiResponse, ChatMessage, PendingInterrupt } from "./types";
+import { sendChat, fetchHistory, deleteHistory, DailyLimitError } from "@/lib/backend-client";
+import type { ChatApiResponse, ChatCard, ChatMessage, PendingInterrupt } from "./types";
 
 const TYPEWRITER_MS_PER_CHAR = 12;
 
@@ -17,17 +17,19 @@ type Status = "idle" | "thinking" | "limited" | "error";
 export function useChatSession() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<Status>("idle");
+  const [restoring, setRestoring] = useState(false);
   const [pendingCheckout, setPendingCheckout] = useState<PendingInterrupt | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const typewriterTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const restoredRef = useRef(false);
 
   const appendMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
   }, []);
 
-  const streamAssistantText = useCallback((fullText: string) => {
+  const streamAssistantText = useCallback((fullText: string, cards?: ChatCard[]) => {
     const id = uid();
-    appendMessage({ id, role: "assistant", content: "", isStreaming: true, createdAt: Date.now() });
+    appendMessage({ id, role: "assistant", content: "", cards, isStreaming: true, createdAt: Date.now() });
 
     let i = 0;
     if (typewriterTimer.current) clearInterval(typewriterTimer.current);
@@ -47,14 +49,42 @@ export function useChatSession() {
     (data: ChatApiResponse) => {
       if (data.type === "interrupt") {
         setPendingCheckout(data.data);
-        streamAssistantText(data.data.question);
+        streamAssistantText(data.data.question, data.cards);
       } else {
         setPendingCheckout(null);
-        streamAssistantText(data.content);
+        streamAssistantText(data.content, data.cards);
       }
     },
     [streamAssistantText]
   );
+
+  /** گفتگوی ذخیره‌شده‌ی سرور را برمی‌گرداند (فقط یک بار؛ اگر شکست بخورد دفعه‌ی بعد دوباره تلاش می‌شود). */
+  const restore = useCallback(async () => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    setRestoring(true);
+    try {
+      const h = await fetchHistory();
+      setMessages(
+        h.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          cards: m.cards?.length ? m.cards : undefined,
+          createdAt: 0, // زمان واقعی پیام‌های قدیمی ذخیره نشده؛ نمایش داده نمی‌شود
+        }))
+      );
+      setPendingCheckout(h.pending);
+      if (h.remaining <= 0) setStatus("limited");
+    } catch (err) {
+      restoredRef.current = false;
+      if (!(err instanceof Error && err.message === "NOT_LOGGED_IN")) {
+        setErrorText("Couldn't load your previous conversation.");
+      }
+    } finally {
+      setRestoring(false);
+    }
+  }, []);
 
   const send = useCallback(
     async (text: string, resume = false) => {
@@ -108,8 +138,15 @@ export function useChatSession() {
     [appendMessage, send]
   );
 
-  // فقط نمای چت را پاک می‌کند. سقف روزانه‌ی پیام سمت سرور است و با این دکمه ریست نمی‌شود.
-  const resetConversation = useCallback(() => {
+  /** گفتگوی جدید: حافظه‌ی چت روی سرور پاک می‌شود. سقف روزانه‌ی پیام ریست نمی‌شود. */
+  const resetConversation = useCallback(async () => {
+    try {
+      await deleteHistory();
+    } catch {
+      setErrorText("Couldn't clear the conversation. Please try again.");
+      return;
+    }
+    if (typewriterTimer.current) clearInterval(typewriterTimer.current);
     setMessages([]);
     setPendingCheckout(null);
     setErrorText(null);
@@ -119,9 +156,11 @@ export function useChatSession() {
   return {
     messages,
     status,
+    restoring,
     pendingCheckout,
     errorText,
     send,
+    restore,
     resolveCheckout,
     resetConversation,
   };

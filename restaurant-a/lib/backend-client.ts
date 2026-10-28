@@ -1,4 +1,6 @@
 // lib/backend-client.ts  (فقط در کامپوننت‌های 'use client' استفاده شود)
+import type { ChatHistoryResponse } from "@/components/chat-widget/types";
+
 const BACKEND_URL = process.env.NEXT_PUBLIC_CHAT_API_URL ?? "http://127.0.0.1:8000";
 
 let cached: { token: string; expiresAt: number } | null = null;
@@ -69,4 +71,17 @@ export async function sendChat(message: string, resume = false): Promise<ChatRep
   if (res.status === 429) throw new DailyLimitError((await res.json()).detail);
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
+}
+
+/** گفتگوی ذخیره‌شده‌ی کاربر (برای ادامه‌ی گفتگو بعد از بستن تب یا ری‌استارت). */
+export async function fetchHistory(): Promise<ChatHistoryResponse> {
+  const res = await backendFetch("/chat/history");
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+/** «گفتگوی جدید»: حافظه‌ی چت پاک می‌شود؛ سبد، رزرو و سهمیه‌ی روزانه دست‌نخورده می‌مانند. */
+export async function deleteHistory(): Promise<void> {
+  const res = await backendFetch("/chat/history", { method: "DELETE" });
+  if (!res.ok) throw new Error(await readError(res));
 }
