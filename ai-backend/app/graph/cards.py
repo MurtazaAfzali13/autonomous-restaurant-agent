@@ -3,9 +3,7 @@ from langchain_core.messages import HumanMessage, ToolMessage
 
 def collect_turn_cards(messages: list) -> list[dict]:
     """
-    کارت‌های UI (مثلاً عکس غذای اضافه‌شده) را فقط از ToolMessage‌های «همین نوبت» جمع می‌کند،
-    یعنی بعد از آخرین HumanMessage. ابزارها این داده را در ToolMessage.artifact می‌گذارند؛
-    artifact هرگز به مدل فرستاده نمی‌شود.
+   UI cards are extracted only from current-turn ToolMessages (after the last HumanMessage) using hidden artifacts.
     """
     start = 0
     for i in range(len(messages) - 1, -1, -1):

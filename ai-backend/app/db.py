@@ -103,8 +103,6 @@ def get_meal(meal_id: int) -> dict | None:
 # Cart
 # ---------------------------------------------------------------------------
 def get_or_create_active_cart(user_id: int) -> dict:
-    # توصیه: در Postgres یک unique partial index بگذارید تا دو درخواست هم‌زمان دو سبد active نسازند:
-    #   create unique index one_active_cart_per_user on carts(user_id) where status = 'active';
     res = _execute(sb().table("carts").select("*").eq("user_id", user_id).eq("status", "active"))
     if res.data:
         return res.data[0]

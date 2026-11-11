@@ -2,7 +2,7 @@ from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage, Tool
 
 
 def turn_start_index(messages: list, keep_turns: int) -> int:
-    """اندیس شروع آخرین `keep_turns` نوبت (همیشه روی یک HumanMessage)؛ 0 یعنی چیزی برای حذف نیست."""
+    """Identifies the starting index of the last keep_turns turns, always anchoring on a HumanMessage."""
     human_idx = [i for i, m in enumerate(messages) if isinstance(m, HumanMessage)]
     if len(human_idx) <= keep_turns:
         return 0
@@ -13,16 +13,15 @@ def _text(m) -> str:
     c = m.content
     if isinstance(c, str):
         return c
-    if isinstance(c, list):  # بلاک‌های محتوا
+    if isinstance(c, list):  
         return "".join(b.get("text", "") for b in c if isinstance(b, dict))
     return ""
 
 
 def build_history(messages: list, pending: dict | None) -> list[dict]:
     """
-    state گراف را به پیام‌های قابل‌نمایش برای UI تبدیل می‌کند:
-    پیام کاربر، پاسخ‌های نهایی دستیار، و کارت‌ها (artifact ابزارها). پیام‌های داخلی
-    (tool_call ها و ToolMessage ها) نمایش داده نمی‌شوند.
+   Converts graph state to UI messages, displaying user, final assistant replies, 
+   and artifacts while hiding internal tool calls.
     """
     out: list[dict] = []
     cards: list[dict] = []
@@ -48,12 +47,11 @@ def build_history(messages: list, pending: dict | None) -> list[dict]:
 
 def prune_state(graph, config: dict, keep_turns: int, slack: int = 5) -> int:
     """
-    state ذخیره‌شده را به `keep_turns` نوبت آخر محدود می‌کند تا فایل checkpointer بی‌نهایت بزرگ نشود.
-    فقط وقتی اجرا می‌شود که گراف تمام شده باشد (نه وسط interrupt) و از `slack` نوبت بیشتر باشد.
-    تعداد پیام‌های حذف‌شده را برمی‌گرداند.
+   Trims saved state to keep_turns post-execution,
+   preventing infinite checkpointer growth above the slack threshold.
     """
     snap = graph.get_state(config)
-    if snap.next:  # گراف وسط کار/منتظر تایید است
+    if snap.next:  
         return 0
     messages = (snap.values or {}).get("messages", [])
     humans = sum(isinstance(m, HumanMessage) for m in messages)

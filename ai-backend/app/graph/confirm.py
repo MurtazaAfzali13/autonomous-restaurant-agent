@@ -7,11 +7,8 @@ _YES = ("yes", "y", "confirm", "بله", "آره", "تایید")
 
 
 def confirm_checkout_node(state: AgentState):
-    """
-    فقط وقتی اجرا می‌شود که request_checkout در نود tools کامل commit شده باشد؛ پس interrupt()
-    همیشه در یک task مستقل و تک‌منظوره است.
-    چون گفتگو ماندگار است، کاربر ممکن است ساعت‌ها بعد «yes» بزند. قبل از ثبت، سبد زنده با همان
-    چیزی که کاربر تایید کرده مقایسه می‌شود؛ اگر فرق کند سفارشی ثبت نمی‌شود.
+    """ 
+    Order verification before checkout ensures data consistency in persistent conversations after user delays.
     """
     pending = state["pending_checkout"]
 
@@ -28,7 +25,6 @@ def confirm_checkout_node(state: AgentState):
             live_items = db.get_cart_items(pending["user_id"])
             live_lines = [f"- {i['meals']['title']} × {i['quantity']}" for i in live_items]
             live_total = sum(i["price"] * i["quantity"] for i in live_items)
-            # ترتیب ردیف‌ها در دیتابیس تضمین‌شده نیست؛ پس مرتب‌شده مقایسه می‌کنیم.
             changed = (
                 sorted(live_lines) != sorted(pending["summary"].splitlines())
                 or abs(float(live_total) - float(pending["total"])) > 0.005
@@ -60,8 +56,7 @@ def confirm_checkout_node(state: AgentState):
 
 def confirm_room_booking_node(state: AgentState):
     """
-    همان الگو برای رزرو اتاق. قبل از ثبت، قیمت زنده‌ی اتاق با مبلغی که کاربر تایید کرده مقایسه می‌شود
-    (تداخل تاریخ را خود دیتابیس با constraint جلوگیری می‌کند).
+   Room price verification before booking ensures consistent pricing in persistent conversations after user delays.
     """
     pending = state["pending_room_booking"]
 

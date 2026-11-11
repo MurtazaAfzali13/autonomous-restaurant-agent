@@ -15,7 +15,6 @@ from app.models.chat import ChatRequest
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-# قفل به‌ازای هر کاربر (فقط داخل یک پروسه؛ با چند worker باید checkpointer را Postgres کنید).
 _locks: "weakref.WeakValueDictionary[str, asyncio.Lock]" = weakref.WeakValueDictionary()
 
 
@@ -138,4 +137,4 @@ async def clear_history(request: Request, user: CurrentUser = Depends(get_curren
         await asyncio.to_thread(delete_thread, thread_id)
     return {"status": "ok"}
 
-# عمداً endpoint ی برای ریست سقف پیام وجود ندارد.
+
