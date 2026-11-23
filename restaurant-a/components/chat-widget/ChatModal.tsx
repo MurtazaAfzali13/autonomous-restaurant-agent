@@ -9,6 +9,9 @@ import { CheckoutConfirmCard } from "./CheckoutConfirmCard";
 import { RoomBookingConfirmCard } from "./RoomBookingConfirmCard";
 import type { useChatSession } from "./useChatSession";
 
+// File lives at public/images/robot/robot.png (served from /images/robot/robot.png)
+const ROBOT_SRC = "/images/robot/robot.png";
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -41,7 +44,7 @@ export function ChatModal({ open, onClose, session }: Props) {
   const isLimited = status === "limited";
   const canSend = input.trim().length > 0 && !isBusy && !pendingCheckout && !isLimited;
 
-  // «گفتگوی جدید» حافظه‌ی چت را روی سرور پاک می‌کند؛ سبد، رزروها و سهمیه‌ی روزانه تغییر نمی‌کنند.
+  // "New conversation" clears the chat memory on the server; cart, bookings and the daily quota are unchanged.
   const handleClear = () => {
     if (isBusy) return;
     if (messages.length > 0 && !window.confirm("Delete this conversation? Your cart, orders and bookings are not affected.")) return;
@@ -65,7 +68,10 @@ export function ChatModal({ open, onClose, session }: Props) {
         className="absolute inset-0 bg-stone-900/50 backdrop-blur-sm pointer-events-auto sm:bg-transparent sm:backdrop-blur-none sm:pointer-events-none"
       />
 
-      {/* کل مودال چپ‌به‌راست (LTR) است؛ همه‌ی فرزندان این جهت را ارث می‌برند */}
+      {/*
+        The whole modal is LTR; every child inherits this direction.
+        Desktop width: 760px (chat column only), capped to the viewport.
+      */}
       <div
         dir="ltr"
         lang="en"
@@ -73,7 +79,7 @@ export function ChatModal({ open, onClose, session }: Props) {
           relative z-10 flex h-[88vh] w-full flex-col overflow-hidden
           rounded-t-3xl border border-orange-200/70 bg-[#FFF8F0] shadow-2xl shadow-orange-900/25
           pointer-events-auto
-          sm:h-[640px] sm:w-96 sm:rounded-3xl sm:border
+          sm:h-[min(720px,calc(100vh_-_3rem))] sm:w-[min(760px,calc(100vw_-_3rem))] sm:rounded-3xl sm:border
           transition-all duration-300 ease-out
           ${entered ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"}
         `}
@@ -82,8 +88,8 @@ export function ChatModal({ open, onClose, session }: Props) {
             "radial-gradient(circle at 15% 8%, rgba(251,146,60,0.16), transparent 40%), radial-gradient(circle at 85% 92%, rgba(253,186,116,0.22), transparent 45%)",
         }}
       >
-        {/* هدر */}
-        <div className="flex items-center justify-between border-b border-orange-100 px-4 py-4">
+        {/* Header */}
+        <div className="relative z-10 flex items-center justify-between border-b border-orange-100 px-4 py-4">
           <div className="flex items-center gap-2.5">
             <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-orange-600 shadow-lg shadow-orange-500/30">
               <Sparkles className="h-4 w-4 text-white" />
@@ -101,7 +107,7 @@ export function ChatModal({ open, onClose, session }: Props) {
                 <Info className="h-4 w-4" />
               </button>
               {showInfo && (
-                // در LTR دکمه‌ی Info سمت راست هدر است؛ پاپ‌آپ باید از لبه‌ی راست باز شود تا از مودال بیرون نزند
+                // In LTR the Info button is on the right of the header; the popup opens from the right edge so it stays inside the modal
                 <div className="absolute right-0 top-9 z-20 w-56 rounded-xl border border-orange-100 bg-white p-3 text-left text-xs leading-relaxed text-stone-600 shadow-xl shadow-orange-900/10">
                   I can show you the menu and help you place food orders, as well as find and book available hotel rooms — and I'll keep you updated on the status of each.
                 </div>
@@ -124,106 +130,119 @@ export function ChatModal({ open, onClose, session }: Props) {
           </div>
         </div>
 
-        {/* لیست پیام‌ها */}
-        <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
-          {messages.length === 0 && !restoring && (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-100">
-                <Sparkles className="h-5 w-5 text-orange-500" />
-              </span>
-              <p className="text-sm text-stone-700">Hello! What would you like to order or which room would you like to book?</p>
-              <p className="text-xs text-stone-500">You can ask for the menu or search for available rooms on a specific date</p>
-            </div>
-          )}
-
-          {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} />
-          ))}
-
-          {pendingCheckout?.type === "confirm_checkout" && (
-            <CheckoutConfirmCard
-              data={pendingCheckout}
-              disabled={isThinking}
-              onConfirm={() => resolveCheckout(true)}
-              onCancel={() => resolveCheckout(false)}
+        {/* Chat column */}
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+          {/* Messages area. The robot stands right above the input bar, behind the messages. */}
+          <div className="relative min-h-0 flex-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={ROBOT_SRC}
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+              className="pointer-events-none absolute bottom-0 right-4 z-0 h-auto w-50 select-none sm:w-50 md:w-[200px] lg:w-[230px]"
             />
-          )}
+          <div ref={scrollRef} className="relative z-10 h-full space-y-4 overflow-y-auto px-4 py-4 md:px-6">
+            {messages.length === 0 && !restoring && (
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-100">
+                  <Sparkles className="h-5 w-5 text-orange-500" />
+                </span>
+                <p className="text-sm text-stone-700">Hello! What would you like to order or which room would you like to book?</p>
+                <p className="text-xs text-stone-500">You can ask for the menu or search for available rooms on a specific date</p>
+              </div>
+            )}
 
-          {pendingCheckout?.type === "confirm_room_booking" && (
-            <RoomBookingConfirmCard
-              data={pendingCheckout}
-              disabled={isThinking}
-              onConfirm={() => resolveCheckout(true)}
-              onCancel={() => resolveCheckout(false)}
-            />
-          )}
+            {messages.map((m) => (
+              <MessageBubble key={m.id} message={m} />
+            ))}
 
-          {isBusy && <TypingIndicator />}
-
-          {errorText && (
-            <div className="mx-auto max-w-[85%] rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-center text-xs text-red-700">
-              {errorText}
-            </div>
-          )}
-        </div>
-
-        {/* نوار ورودی */}
-        <div className="border-t border-orange-100 bg-[#FFF8F0] p-3">
-          {isLimited ? (
-            <div className="w-full rounded-xl border border-orange-200 bg-orange-50 py-2.5 text-center text-sm font-medium text-orange-700">
-              Daily message limit reached. Please come back tomorrow.
-            </div>
-          ) : (
-            // کل مودال LTR است: ورودی چپ، دکمه‌ی ارسال راست
-            <form onSubmit={handleSubmit} className="flex items-center gap-2">
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                dir="ltr"
-                placeholder={pendingCheckout ? "Please select from the buttons above" : "Type your message..."}
-                disabled={isBusy || !!pendingCheckout}
-                className="
-                  flex-1 rounded-full border border-orange-200 bg-white px-4 py-2.5
-                  text-sm text-stone-800 placeholder:text-stone-400
-                  focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500
-                  disabled:opacity-50
-                "
+            {pendingCheckout?.type === "confirm_checkout" && (
+              <CheckoutConfirmCard
+                data={pendingCheckout}
+                disabled={isThinking}
+                onConfirm={() => resolveCheckout(true)}
+                onCancel={() => resolveCheckout(false)}
               />
-              <button
-                type="submit"
-                disabled={!canSend}
-                className="
-                  flex h-10 w-10 shrink-0 items-center justify-center rounded-full
-                  bg-gradient-to-br from-orange-500 to-orange-600 text-white
-                  shadow-md shadow-orange-500/30
-                  transition hover:brightness-110 disabled:opacity-40
-                "
-                aria-label="Send message"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </form>
-          )}
+            )}
 
-          {/* اقدامات سریع */}
-          <div className="mt-2.5 flex items-center gap-2">
-            <button
-              type="button"
-              disabled={isBusy || !!pendingCheckout || isLimited}
-              onClick={() => void send("What's in my shopping cart?")}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-orange-200 bg-white py-2 text-xs text-stone-600 transition hover:bg-orange-50 disabled:opacity-40"
-            >
-              <ShoppingBag className="h-3.5 w-3.5" />
-              Shopping cart
-            </button>
-            <button
-              type="button"
-              onClick={handleClear}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-orange-200 bg-white py-2 text-xs text-stone-600 transition hover:bg-orange-50"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Clear chat
-            </button>
+            {pendingCheckout?.type === "confirm_room_booking" && (
+              <RoomBookingConfirmCard
+                data={pendingCheckout}
+                disabled={isThinking}
+                onConfirm={() => resolveCheckout(true)}
+                onCancel={() => resolveCheckout(false)}
+              />
+            )}
+
+            {isBusy && <TypingIndicator />}
+
+            {errorText && (
+              <div className="mx-auto max-w-[85%] rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-center text-xs text-red-700">
+                {errorText}
+              </div>
+            )}
+          </div>
+          </div>
+
+          {/* Input bar */}
+          <div className="border-t border-orange-100 bg-[#FFF8F0] p-3 md:px-6">
+            {isLimited ? (
+              <div className="w-full rounded-xl border border-orange-200 bg-orange-50 py-2.5 text-center text-sm font-medium text-orange-700">
+                Daily message limit reached. Please come back tomorrow.
+              </div>
+            ) : (
+              // Modal is LTR: input on the left, send button on the right
+              <form onSubmit={handleSubmit} className="flex items-center gap-2">
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  dir="ltr"
+                  placeholder={pendingCheckout ? "Please select from the buttons above" : "Type your message..."}
+                  disabled={isBusy || !!pendingCheckout}
+                  className="
+                    flex-1 rounded-full border border-orange-200 bg-white px-4 py-2.5
+                    text-sm text-stone-800 placeholder:text-stone-400
+                    focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500
+                    disabled:opacity-50
+                  "
+                />
+                <button
+                  type="submit"
+                  disabled={!canSend}
+                  className="
+                    flex h-10 w-10 shrink-0 items-center justify-center rounded-full
+                    bg-gradient-to-br from-orange-500 to-orange-600 text-white
+                    shadow-md shadow-orange-500/30
+                    transition hover:brightness-110 disabled:opacity-40
+                  "
+                  aria-label="Send message"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </form>
+            )}
+
+            {/* Quick actions */}
+            <div className="mt-2.5 flex items-center gap-2">
+              <button
+                type="button"
+                disabled={isBusy || !!pendingCheckout || isLimited}
+                onClick={() => void send("What's in my shopping cart?")}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-orange-200 bg-white py-2 text-xs text-stone-600 transition hover:bg-orange-50 disabled:opacity-40"
+              >
+                <ShoppingBag className="h-3.5 w-3.5" />
+                Shopping cart
+              </button>
+              <button
+                type="button"
+                onClick={handleClear}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-orange-200 bg-white py-2 text-xs text-stone-600 transition hover:bg-orange-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Clear chat
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -25,7 +25,7 @@ GRAPH_RECURSION_LIMIT: int = int(os.environ.get("GRAPH_RECURSION_LIMIT", 12))
 MAX_STORED_TURNS: int = int(os.environ.get("MAX_STORED_TURNS", 30))
 
 # --- محدودیت گفتگو ---
-MAX_MESSAGES_PER_DAY: int = int(os.environ.get("MAX_MESSAGES_PER_DAY", 10))
+MAX_MESSAGES_PER_DAY: int = int(os.environ.get("MAX_MESSAGES_PER_DAY", 4))
 
 # --- Timezone: «امروز» برای سقف روزانه و قانون لغو رزرو ---
 APP_TIMEZONE: str = os.environ.get("APP_TIMEZONE", "Asia/Kabul")
