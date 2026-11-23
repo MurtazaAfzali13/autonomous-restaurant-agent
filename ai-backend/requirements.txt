@@ -1,9 +1,11 @@
 fastapi
 uvicorn
 langgraph
-langgraph-checkpoint-sqlite
+langgraph-checkpoint-postgres
+psycopg[binary,pool]
 langchain
 langchain-openai
+langsmith
 supabase
 python-dotenv
 pydantic

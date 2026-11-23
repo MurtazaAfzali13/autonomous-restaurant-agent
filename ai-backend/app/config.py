@@ -25,7 +25,7 @@ GRAPH_RECURSION_LIMIT: int = int(os.environ.get("GRAPH_RECURSION_LIMIT", 12))
 MAX_STORED_TURNS: int = int(os.environ.get("MAX_STORED_TURNS", 30))
 
 # --- محدودیت گفتگو ---
-MAX_MESSAGES_PER_DAY: int = int(os.environ.get("MAX_MESSAGES_PER_DAY", 4))
+MAX_MESSAGES_PER_DAY: int = int(os.environ.get("MAX_MESSAGES_PER_DAY", 10))
 
 # --- Timezone: «امروز» برای سقف روزانه و قانون لغو رزرو ---
 APP_TIMEZONE: str = os.environ.get("APP_TIMEZONE", "Asia/Kabul")
@@ -40,8 +40,10 @@ except Exception as _e:
         "On Windows run: pip install tzdata  — or set APP_TIMEZONE to a valid IANA name."
     ) from _e
 
-# --- LangGraph checkpointer ---
-CHECKPOINT_DB_PATH: str = os.environ.get("CHECKPOINT_DB_PATH", "chat_memory.db")
+# --- LangGraph checkpointer (Supabase Postgres, via the transaction pooler on port 6543) ---
+DATABASE_URL: str = os.environ["DATABASE_URL"]
+# Keep the pool small: on Vercel every serverless instance opens its own pool.
+DB_POOL_MAX_SIZE: int = int(os.environ.get("DB_POOL_MAX_SIZE", 3))
 
 # --- احراز هویت: توکن کوتاه‌عمر که Next.js (بعد از لاگین NextAuth) امضا می‌کند ---
 # همین مقدار باید دقیقاً در .env فرانت (سمت سرور) هم به نام BACKEND_JWT_SECRET باشد.

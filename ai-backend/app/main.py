@@ -1,14 +1,13 @@
 import asyncio
 import logging
-import sqlite3
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from langgraph.checkpoint.sqlite import SqliteSaver
 
 from app import db
-from app.config import FRONTEND_ORIGIN, CHECKPOINT_DB_PATH
+from app.checkpointer import postgres_checkpointer
+from app.config import FRONTEND_ORIGIN
 from app.graph.build import build_graph
 from app.routers import chat, menu, orders
 
@@ -18,20 +17,16 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ---- startup: همه‌ی منابع اینجا ساخته می‌شوند، نه موقع import ----
+    # ---- startup: all resources are created here, not at import time ----
     await asyncio.to_thread(db.init_client)
-
-    conn = sqlite3.connect(CHECKPOINT_DB_PATH, check_same_thread=False)
-    conn.execute("PRAGMA journal_mode=WAL")  # خواندن/نوشتن هم‌زمان بهتر
-    checkpointer = SqliteSaver(conn)
-    app.state.graph = build_graph(checkpointer)
-    logger.info("Startup complete: Supabase client + checkpointer + graph ready")
-
     try:
-        yield
+        # Supabase Postgres checkpointer (replaces the local SQLite file)
+        with postgres_checkpointer() as checkpointer:
+            app.state.graph = build_graph(checkpointer)
+            logger.info("Startup complete: Supabase client + Postgres checkpointer + graph ready")
+            yield
     finally:
-        # ---- shutdown ----
-        conn.close()
+        # ---- shutdown (the checkpointer's connection pool is closed by the with-block) ----
         db.close_client()
         logger.info("Shutdown complete")
 
