@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import * as THREE from "three";
 
 const DEFAULT_SHEETS: readonly string[] = [
@@ -13,6 +13,29 @@ const DEFAULT_SHEETS: readonly string[] = [
   "https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20261112_215016_855d2215-f3f5-4580-8a0f-9ba6087fc97f.png&w=1536&q=82",
   "https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20261112_214908_feb56792-db60-49c5-9158-c19319c26fc0.png&w=1536&q=82",
 ];
+
+// کش سراسری تصاویر در حافظه مرورگر (برای جلوگیری از دانلود مجدد هنگام جابه‌جایی بین صفحات)
+const imageCache = new Map<string, Promise<HTMLImageElement>>();
+
+function loadImageCached(url: string): Promise<HTMLImageElement> {
+  const existing = imageCache.get(url);
+  if (existing) return existing;
+
+  const promise = new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.decoding = "async";
+    img.onload = () => resolve(img);
+    img.onerror = (err) => {
+      imageCache.delete(url);
+      reject(err);
+    };
+    img.src = url;
+  });
+
+  imageCache.set(url, promise);
+  return promise;
+}
 
 const DEG = Math.PI / 180;
 const BAND_HEIGHTS_DEG = [11, 14, 17, 21, 24, 21, 17, 14, 11];
@@ -74,9 +97,7 @@ interface TileMeta {
 }
 
 interface PhotoGlobeProps {
-  /** رنگ محوشدگی لبه‌های کره (برای پس‌زمینه تیره بنر) */
   rimColor?: string;
-  /** آرایه ۸ تصویر شیت ۲×۲ */
   sheets?: readonly string[];
   className?: string;
 }
@@ -99,7 +120,7 @@ function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max);
 }
 
-export default function PhotoGlobe({
+const PhotoGlobe = memo(function PhotoGlobe({
   rimColor = "#0b0f14",
   sheets = DEFAULT_SHEETS,
   className = "",
@@ -144,42 +165,58 @@ export default function PhotoGlobe({
     const rand = createPRNG(SEED);
     const rimCol = new THREE.Color(rimColor);
 
-    const loader = new THREE.TextureLoader();
-    loader.setCrossOrigin("anonymous");
-
-    let loadedCount = 0;
+    let disposed = false;
+    let rafId = 0;
+    let prevTime = performance.now();
+    let isVisible = true;
     let introStarted = false;
     let introStartTime = 0;
 
-    const triggerIntro = () => {
-      if (introStarted) return;
-      introStarted = true;
-      introStartTime = performance.now();
+    // شروع یا ادامه رندر فقط در زمان نیاز
+    const requestRender = () => {
+      if (disposed || rafId !== 0) return;
+      prevTime = performance.now();
+      rafId = window.requestAnimationFrame(animate);
     };
 
+    const triggerIntro = () => {
+      if (introStarted || disposed) return;
+      introStarted = true;
+      introStartTime = performance.now();
+      requestRender();
+    };
+
+    // ساخت Textureها با استفاده از imageCache
+    let loadedCount = 0;
     const textures: THREE.Texture[] = sheets.map((url) => {
-      const tex = loader.load(
-        url,
-        () => {
-          loadedCount += 1;
-          if (loadedCount >= sheets.length) triggerIntro();
-        },
-        undefined,
-        () => {
-          loadedCount += 1;
-          if (loadedCount >= sheets.length) triggerIntro();
-        }
-      );
+      const tex = new THREE.Texture();
       tex.minFilter = THREE.LinearMipmapLinearFilter;
       tex.magFilter = THREE.LinearFilter;
       tex.generateMipmaps = true;
       tex.wrapS = THREE.ClampToEdgeWrapping;
       tex.wrapT = THREE.ClampToEdgeWrapping;
+
+      loadImageCached(url)
+        .then((img) => {
+          if (disposed) return;
+          tex.image = img;
+          tex.needsUpdate = true;
+          loadedCount += 1;
+          if (loadedCount >= sheets.length) triggerIntro();
+          else requestRender();
+        })
+        .catch(() => {
+          if (disposed) return;
+          loadedCount += 1;
+          if (loadedCount >= sheets.length) triggerIntro();
+        });
+
       return tex;
     });
 
     const safetyTimeout = window.setTimeout(triggerIntro, 4000);
 
+    // ساخت ۹ ردیف تایل روی کره
     const totalBandDeg =
       BAND_HEIGHTS_DEG.reduce((sum, h) => sum + h, 0) +
       GAP_DEG * (BAND_HEIGHTS_DEG.length - 1);
@@ -357,15 +394,16 @@ export default function PhotoGlobe({
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      requestRender();
     };
     updateSize();
     const resizeObserver = new ResizeObserver(updateSize);
     resizeObserver.observe(wrap);
 
-    let isVisible = true;
     const visibilityObserver = new IntersectionObserver(
       (entries) => {
         isVisible = entries[0]?.isIntersecting ?? true;
+        if (isVisible) requestRender();
       },
       { rootMargin: "120px" }
     );
@@ -378,8 +416,9 @@ export default function PhotoGlobe({
       const currentY = window.scrollY;
       const delta = currentY - lastScrollY;
       lastScrollY = currentY;
-      if (!reducedMotion) {
+      if (!reducedMotion && delta !== 0) {
         velocity = clamp(velocity + delta * 0.0042, -6, 6);
+        requestRender();
       }
     };
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -400,6 +439,7 @@ export default function PhotoGlobe({
       lastPointerX = e.clientX;
       lastPointerY = e.clientY;
       lastPointerTime = performance.now();
+      requestRender();
     };
 
     const onPointerMove = (e: PointerEvent) => {
@@ -424,6 +464,7 @@ export default function PhotoGlobe({
 
       const instVel = (dx * factor) / dt;
       dragVel = 0.6 * dragVel + 0.4 * instVel;
+      requestRender();
     };
 
     const endDrag = (e: PointerEvent) => {
@@ -434,6 +475,7 @@ export default function PhotoGlobe({
         canvas.releasePointerCapture(e.pointerId);
       }
       velocity = clamp(dragVel, -6, 6);
+      requestRender();
     };
 
     canvas.addEventListener("pointerdown", onPointerDown);
@@ -441,11 +483,10 @@ export default function PhotoGlobe({
     canvas.addEventListener("pointerup", endDrag);
     canvas.addEventListener("pointercancel", endDrag);
 
-    let rafId = 0;
-    let prevTime = performance.now();
+    function animate(now: number) {
+      rafId = 0;
+      if (disposed) return;
 
-    const animate = (now: number) => {
-      rafId = window.requestAnimationFrame(animate);
       const dt = Math.min((now - prevTime) / 1000, 0.05);
       prevTime = now;
 
@@ -497,24 +538,39 @@ export default function PhotoGlobe({
         }
       }
 
+      let isMoving = inIntro || isDragging;
+
       if (!isDragging) {
-        if (Math.abs(velocity) > 0.0001) {
+        if (Math.abs(velocity) > 0.001) {
           group.rotation.y += velocity * dt;
           velocity *= Math.exp(-2.6 * dt);
+          isMoving = true;
         } else {
           velocity = 0;
         }
-        group.rotation.x +=
-          (0.2 - group.rotation.x) * (1 - Math.exp(-2.2 * dt));
+
+        const tiltDiff = 0.2 - group.rotation.x;
+        if (Math.abs(tiltDiff) > 0.0005) {
+          group.rotation.x += tiltDiff * (1 - Math.exp(-2.2 * dt));
+          isMoving = true;
+        } else {
+          group.rotation.x = 0.2;
+        }
       }
 
       renderer.render(scene, camera);
-    };
 
-    rafId = window.requestAnimationFrame(animate);
+      // فقط اگر هنوز حرکتی وجود دارد فریم بعدی را درخواست کن (در حالت ساکن CPU = 0%)
+      if (isMoving) {
+        rafId = window.requestAnimationFrame(animate);
+      }
+    }
+
+    requestRender();
 
     return () => {
-      window.cancelAnimationFrame(rafId);
+      disposed = true;
+      if (rafId) window.cancelAnimationFrame(rafId);
       window.clearTimeout(safetyTimeout);
       resizeObserver.disconnect();
       visibilityObserver.disconnect();
@@ -541,4 +597,6 @@ export default function PhotoGlobe({
       />
     </div>
   );
-}
+});
+
+export default PhotoGlobe;

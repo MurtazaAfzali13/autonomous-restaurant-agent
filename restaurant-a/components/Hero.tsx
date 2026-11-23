@@ -1,7 +1,13 @@
 'use client';
 
 import { Users, Clock, Coffee } from "lucide-react";
-import PhotoGlobe from "@/components/navbar/PhotoGlobe";
+import dynamic from "next/dynamic";
+const PhotoGlobe = dynamic(() => import("@/components/navbar/PhotoGlobe"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full aspect-square rounded-full bg-white/5 animate-pulse" />
+  ),
+});
 
 const stats = [
   { value: "5+", label: "Years", icon: Clock, bgColor: "bg-green-100", iconColor: "text-green-500" },
