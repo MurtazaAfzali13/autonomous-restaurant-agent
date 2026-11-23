@@ -132,57 +132,54 @@ export function ChatModal({ open, onClose, session }: Props) {
 
         {/* Chat column */}
         <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-          {/* Messages area. The robot stands right above the input bar, behind the messages. */}
+          {/* Messages area. The robot is shown only in the empty state (see below). */}
           <div className="relative min-h-0 flex-1">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={ROBOT_SRC}
-              alt=""
-              aria-hidden="true"
-              draggable={false}
-              className="pointer-events-none absolute bottom-0 right-4 z-0 h-auto w-50 select-none sm:w-50 md:w-[200px] lg:w-[230px]"
-            />
-          <div ref={scrollRef} className="relative z-10 h-full space-y-4 overflow-y-auto px-4 py-4 md:px-6">
-            {messages.length === 0 && !restoring && (
-              <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-100">
-                  <Sparkles className="h-5 w-5 text-orange-500" />
-                </span>
-                <p className="text-sm text-stone-700">Hello! What would you like to order or which room would you like to book?</p>
-                <p className="text-xs text-stone-500">You can ask for the menu or search for available rooms on a specific date</p>
-              </div>
-            )}
+            <div ref={scrollRef} className="relative z-10 h-full space-y-4 overflow-y-auto px-4 py-4 md:px-6">
+              {messages.length === 0 && !restoring && !isThinking && (
+                <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={ROBOT_SRC}
+                    alt=""
+                    aria-hidden="true"
+                    draggable={false}
+                    className="pointer-events-none h-auto w-36 select-none sm:w-44"
+                  />
+                  <p className="text-sm text-stone-700">Hello! What would you like to order or which room would you like to book?</p>
+                  <p className="text-xs text-stone-500">You can ask for the menu or search for available rooms on a specific date</p>
+                </div>
+              )}
 
-            {messages.map((m) => (
-              <MessageBubble key={m.id} message={m} />
-            ))}
+              {messages.map((m) => (
+                <MessageBubble key={m.id} message={m} />
+              ))}
 
-            {pendingCheckout?.type === "confirm_checkout" && (
-              <CheckoutConfirmCard
-                data={pendingCheckout}
-                disabled={isThinking}
-                onConfirm={() => resolveCheckout(true)}
-                onCancel={() => resolveCheckout(false)}
-              />
-            )}
+              {pendingCheckout?.type === "confirm_checkout" && (
+                <CheckoutConfirmCard
+                  data={pendingCheckout}
+                  disabled={isThinking}
+                  onConfirm={() => resolveCheckout(true)}
+                  onCancel={() => resolveCheckout(false)}
+                />
+              )}
 
-            {pendingCheckout?.type === "confirm_room_booking" && (
-              <RoomBookingConfirmCard
-                data={pendingCheckout}
-                disabled={isThinking}
-                onConfirm={() => resolveCheckout(true)}
-                onCancel={() => resolveCheckout(false)}
-              />
-            )}
+              {pendingCheckout?.type === "confirm_room_booking" && (
+                <RoomBookingConfirmCard
+                  data={pendingCheckout}
+                  disabled={isThinking}
+                  onConfirm={() => resolveCheckout(true)}
+                  onCancel={() => resolveCheckout(false)}
+                />
+              )}
 
-            {isBusy && <TypingIndicator />}
+              {isBusy && <TypingIndicator />}
 
-            {errorText && (
-              <div className="mx-auto max-w-[85%] rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-center text-xs text-red-700">
-                {errorText}
-              </div>
-            )}
-          </div>
+              {errorText && (
+                <div className="mx-auto max-w-[85%] rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-center text-xs text-red-700">
+                  {errorText}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Input bar */}

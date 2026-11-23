@@ -17,7 +17,7 @@ LLM_MAX_RETRIES: int = int(os.environ.get("LLM_MAX_RETRIES", 2))
 # --- Context window ---
 # تعداد «نوبت‌های کاربر» که به مدل فرستاده می‌شود (هر نوبت = پیام کاربر + تمام ابزارها و پاسخ‌های بعدش).
 # برای تست 4؛ در پروداکشن واقعی بالا ببرید (مثلاً 8 تا 12).
-MAX_CONTEXT_TURNS: int = int(os.environ.get("MAX_CONTEXT_TURNS", 4))
+MAX_CONTEXT_TURNS: int = int(os.environ.get("MAX_CONTEXT_TURNS", 5))
 # سقف مراحل agent<->tools در یک درخواست (جلوگیری از حلقه‌ی بی‌پایان ابزار)
 GRAPH_RECURSION_LIMIT: int = int(os.environ.get("GRAPH_RECURSION_LIMIT", 12))
 
