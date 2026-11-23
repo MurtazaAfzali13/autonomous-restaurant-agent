@@ -1,6 +1,7 @@
 'use client';
 
 import { Users, Clock, Coffee } from "lucide-react";
+import PhotoGlobe from "@/components/navbar/PhotoGlobe";
 
 const stats = [
   { value: "5+", label: "Years", icon: Clock, bgColor: "bg-green-100", iconColor: "text-green-500" },
@@ -83,30 +84,18 @@ export default function Hero() {
             </div>
           </div>
 
-          {/* --- RIGHT CONTENT (Floating Image) --- */}
+          {/* --- RIGHT CONTENT (3D Photo Globe) --- */}
           <div className="relative lg:w-1/2 flex justify-center lg:justify-end mb-10 lg:mb-0">
-            <div className="relative w-full max-w-sm sm:max-w-md lg:max-w-lg mx-auto animate-[float_6s_ease-in-out_infinite]">
-              <img
-                src="/images/logo/menu-item-1.png"
-                alt="Signature Afghan dish at Ariana Feast"
-                className="relative z-10 w-full rounded-2xl shadow-2xl object-cover"
-              />
+            <div className="relative w-full max-w-sm sm:max-w-md lg:max-w-[540px] mx-auto">
+              <PhotoGlobe rimColor="#0b0f14" className="relative z-10" />
 
               {/* Decorative Circles */}
-              <div className="absolute -left-6 -top-6 h-16 w-16 bg-green-200 rounded-full opacity-70 blur-md animate-ping" />
-              <div className="absolute -right-8 -bottom-8 h-24 w-24 bg-emerald-200 rounded-full opacity-60 blur-md animate-pulse" />
+              <div className="pointer-events-none absolute -left-6 -top-6 h-16 w-16 bg-green-200 rounded-full opacity-70 blur-md animate-ping" />
+              <div className="pointer-events-none absolute -right-8 -bottom-8 h-24 w-24 bg-emerald-200 rounded-full opacity-60 blur-md animate-pulse" />
             </div>
           </div>
         </div>
       </div>
-
-      {/* Custom Floating Animation */}
-      <style jsx>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-20px); }
-        }
-      `}</style>
     </section>
   );
 }
