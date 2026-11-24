@@ -3,6 +3,7 @@
 import { useMeals } from './hooks/useMeal';
 import { DishCard } from './components/DishCard';
 import { MealGridSkeleton } from './components/MealGridSkeleton';
+import { EmptyMealsState } from '@/components/EmptyMealsState';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 
@@ -61,9 +62,11 @@ export default function MealsList() {
             ))}
           </div>
         ) : (
-          <p className="text-center text-gray-500 text-lg">
-            No meals found for this category 🍽️
-          </p>
+          <EmptyMealsState
+            category={category}
+            onResetCategory={() => setCategory('All')}
+            isAdmin={isAdmin}
+          />
         )}
       </div>
     </section>
