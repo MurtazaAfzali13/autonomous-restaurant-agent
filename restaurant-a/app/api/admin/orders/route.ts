@@ -10,25 +10,14 @@ const supabase = createClient(
 
 export async function GET() {
   try {
-    // -----------------------------
-    // بررسی دسترسی ادمین
-    // -----------------------------
-
     const session = await getServerSession(authOptions);
 
     if (!session?.user || session.user.role !== "admin") {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Forbidden",
-        },
+        { success: false, error: "Forbidden" },
         { status: 403 }
       );
     }
-
-    // -----------------------------
-    // دریافت تمام سفارش‌ها
-    // -----------------------------
 
     const { data: orders, error: ordersError } = await supabase
       .from("orders")
@@ -50,19 +39,11 @@ export async function GET() {
 
     if (ordersError) {
       console.error("❌ Failed to fetch orders:", ordersError);
-
       return NextResponse.json(
-        {
-          success: false,
-          error: ordersError.message,
-        },
+        { success: false, error: ordersError.message },
         { status: 500 }
       );
     }
-
-    // -----------------------------
-    // پاسخ
-    // -----------------------------
 
     return NextResponse.json({
       success: true,
@@ -70,12 +51,8 @@ export async function GET() {
     });
   } catch (err) {
     console.error("❌ Failed to fetch orders:", err);
-
     return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to fetch orders",
-      },
+      { success: false, error: "Failed to fetch orders" },
       { status: 500 }
     );
   }

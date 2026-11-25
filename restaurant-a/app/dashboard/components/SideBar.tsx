@@ -9,11 +9,13 @@ import {
   BarChart3,
   Users,
   Settings,
+  ChefHat,            // ← اضافه شد
 } from "lucide-react";
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/orders", label: "Orders", icon: Utensils },
+  { href: "/dashboard/meals", label: "Manage Meals", icon: ChefHat },   // ← اضافه شد
   { href: "/menu", label: "Menu", icon: ClipboardList },
   { href: "/dashboard/reports", label: "Reports", icon: BarChart3 },
 ];
