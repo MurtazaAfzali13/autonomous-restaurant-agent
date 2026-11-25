@@ -1,125 +1,115 @@
+// app/dashboard/components/MealsChart.tsx
 'use client';
 
-import React from "react";
-import { useTheme } from "next-themes";
-import { Meal } from "@/app/menu/entities/Dish";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { useMemo, useState } from 'react';
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { ChefHat } from 'lucide-react';
+import { Meal } from '@/app/menu/entities/Dish';
+import { ChartTooltip, COLORS, GlassCard, GRID, TICK } from './ui';
 
 interface MealsChartProps {
   meals: Meal[];
-  category: string;
+  category?: string;
   loading: boolean;
 }
-const MealsChart = ({meals,category,loading}:MealsChartProps) => {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
 
-  // گرفتن داده‌ها از hook
- 
+const short = (s: string) => (s.length > 11 ? `${s.slice(0, 10)}…` : s);
 
-  // آماده‌سازی داده‌ها برای نمودار
-  const chartData = meals.map(meal => ({
-    name: meal.title,
-    price: meal.price,
-  }));
+export default function MealsChart({ meals, loading }: MealsChartProps) {
+  const [active, setActive] = useState<string>('All');
+  const [hover, setHover] = useState<number | null>(null);
 
-  if (loading) {
-    return (
-      <p className="text-slate-400 text-sm py-8 text-center tracking-widest uppercase">Loading chart...</p>
-    );
-  }
+  const categories = useMemo(() => {
+    const set = new Set<string>(meals.map((m: any) => m.category || 'Other'));
+    return ['All', ...Array.from(set)];
+  }, [meals]);
+
+  const data = useMemo(
+    () =>
+      meals
+        .filter((m: any) => active === 'All' || (m.category || 'Other') === active)
+        .map((m) => ({ name: m.title, price: Number(m.price) }))
+        .sort((a, b) => b.price - a.price)
+        .slice(0, 10),
+    [meals, active]
+  );
+
+  const prices = data.map((d) => d.price);
+  const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
+  const stats = [
+    { label: 'Dishes', value: String(meals.length), color: COLORS.violet },
+    { label: 'Average', value: `$${avg.toFixed(2)}`, color: COLORS.sky },
+    { label: 'Highest', value: `$${prices.length ? Math.max(...prices).toFixed(2) : '0.00'}`, color: COLORS.emerald },
+    { label: 'Lowest', value: `$${prices.length ? Math.min(...prices).toFixed(2) : '0.00'}`, color: COLORS.amber },
+  ];
 
   return (
-    <Card className={`shadow-none border rounded-2xl ${
-      isDark
-        ? 'border-slate-800 bg-transparent'
-        : 'border-slate-800 bg-slate-900/30'
-    }`}>
-      <CardHeader className="pb-0">
-        <CardTitle className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-          Meals Pricing
-        </CardTitle>
-        <CardDescription className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-          Current prices by dish
-        </CardDescription>
-      </CardHeader>
+    <GlassCard title="Meals Pricing" subtitle="Top 10 dishes by price" icon={ChefHat} accent={COLORS.violet} className="h-full">
+      {loading ? (
+        <p className="py-16 text-center text-xs uppercase tracking-widest text-slate-500">Loading chart...</p>
+      ) : (
+        <>
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {categories.map((c) => (
+              <button
+                key={c}
+                onClick={() => setActive(c)}
+                className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition ${
+                  active === c
+                    ? 'border-violet-400/60 bg-violet-500/20 text-violet-200 shadow-[0_0_16px_-4px_#a78bfa]'
+                    : 'border-white/10 bg-white/[0.03] text-slate-400 hover:text-white'
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
 
-      <CardContent className="pt-4">
-        <div style={{ width: "100%", height: 320 }}>
-          <ResponsiveContainer>
-            <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-              <CartesianGrid 
-                strokeDasharray="3 3" 
-                stroke={isDark ? "#374151" : "#e0e0e0"} 
-              />
-              <XAxis 
-                dataKey="name" 
-                tick={{ fill: isDark ? "#d1d5db" : "#555" }} 
-                angle={-30}
-                textAnchor="end"
-                height={60}
-              />
-              <YAxis 
-                tick={{ fill: isDark ? "#d1d5db" : "#555" }} 
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: isDark ? "#1f2937" : "white",
-                  borderRadius: "12px",
-                  border: isDark ? "1px solid #374151" : "1px solid #ddd",
-                  color: isDark ? "#f9fafb" : "#000",
-                }}
-              />
-              <Legend 
-                verticalAlign="top" 
-                height={30}
-                wrapperStyle={{ color: isDark ? "#d1d5db" : "#555" }}
-              />
+          <div className="mb-2 grid grid-cols-4 gap-2">
+            {stats.map((s) => (
+              <div key={s.label} className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-2.5 py-1">
+                <p className="text-[10px] text-slate-500">{s.label}</p>
+                <p className="text-sm font-black" style={{ color: s.color, textShadow: `0 0 14px ${s.color}66` }}>
+                  {s.value}
+                </p>
+              </div>
+            ))}
+          </div>
 
-              <defs>
-                <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.1} />
-                </linearGradient>
-              </defs>
-
-              <Line
-                type="monotone"
-                dataKey="price"
-                stroke="#4f46e5"
-                strokeWidth={3}
-                dot={{ 
-                  r: 5, 
-                  strokeWidth: 2, 
-                  stroke: "#4f46e5", 
-                  fill: isDark ? "#1f2937" : "white" 
-                }}
-                activeDot={{ r: 7 }}
-                fill="url(#colorPrice)"
-                name="Price ($)"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </CardContent>
-    </Card>
+          <div className="h-[170px] w-full">
+            <ResponsiveContainer>
+              <BarChart data={data} margin={{ top: 10, right: 8, left: -12, bottom: 0 }} onMouseLeave={() => setHover(null)}>
+                <defs>
+                  <linearGradient id="gMeal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#c4b5fd" />
+                    <stop offset="55%" stopColor={COLORS.violet} />
+                    <stop offset="100%" stopColor="#4f46e5" stopOpacity={0.35} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis
+                  dataKey="name"
+                  tickFormatter={short}
+                  tick={{ fill: TICK, fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval={0}
+                  angle={-25}
+                  textAnchor="end"
+                  height={44}
+                />
+                <YAxis tick={{ fill: TICK, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
+                <Tooltip content={<ChartTooltip prefix="$" />} cursor={{ fill: 'rgba(167,139,250,0.08)' }} />
+                <Bar dataKey="price" name="Price" radius={[10, 10, 4, 4]} maxBarSize={38} onMouseEnter={(_, i) => setHover(i)}>
+                  {data.map((_, i) => (
+                    <Cell key={i} fill="url(#gMeal)" fillOpacity={hover === null || hover === i ? 1 : 0.35} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
+    </GlassCard>
   );
-};
-
-export default MealsChart;
+}

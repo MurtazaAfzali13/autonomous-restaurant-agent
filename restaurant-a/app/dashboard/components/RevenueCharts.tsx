@@ -2,61 +2,227 @@
 'use client';
 
 import {
-  LineChart,
-  Line,
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from 'recharts';
+import { BedDouble, CalendarCheck, PieChart as PieIcon, TrendingUp } from 'lucide-react';
+import { ChartTooltip, COLORS, GlassCard, GRID, TICK } from './ui';
 
-const GRID = '#1e293b';
-const TICK = '#94a3b8';
-const TOOLTIP_STYLE = {
-  backgroundColor: '#0f172a',
-  border: '1px solid #334155',
-  borderRadius: 12,
-  color: '#f1f5f9',
-};
-
+/* ------------------------------------------------------------------ */
+/* Revenue trend                                                      */
+/* ------------------------------------------------------------------ */
 export function RevenueTrendChart({
   data,
 }: {
   data: { date: string; Food: number; Rooms: number }[];
 }) {
   return (
-    <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 h-full">
-      <h2 className="text-lg font-bold text-white mb-1">Revenue Overview</h2>
-      <p className="text-sm text-slate-500 mb-4">Food orders vs room reservations</p>
-      <div style={{ width: '100%', height: 300 }}>
+    <GlassCard
+      title="Revenue Overview"
+      subtitle="Food orders vs room reservations"
+      icon={TrendingUp}
+      accent={COLORS.emerald}
+      className="h-full"
+      right={
+        <div className="hidden items-center gap-4 text-xs text-slate-400 sm:flex">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" /> Food
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]" /> Rooms
+          </span>
+        </div>
+      }
+    >
+      <div
+        className="h-[200px] w-full [&_.recharts-area-curve]:[filter:drop-shadow(0_0_6px_rgba(52,211,153,0.55))]"
+      >
         <ResponsiveContainer>
-          <LineChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
-            <XAxis dataKey="date" tick={{ fill: TICK, fontSize: 12 }} />
-            <YAxis tick={{ fill: TICK, fontSize: 12 }} />
-            <Tooltip contentStyle={TOOLTIP_STYLE} />
-            <Legend wrapperStyle={{ color: TICK, fontSize: 12 }} />
-            <Line type="monotone" dataKey="Food" stroke="#10b981" strokeWidth={3} dot={false} activeDot={{ r: 5 }} />
-            <Line type="monotone" dataKey="Rooms" stroke="#38bdf8" strokeWidth={3} dot={false} activeDot={{ r: 5 }} />
-          </LineChart>
+          <AreaChart data={data} margin={{ top: 10, right: 12, left: -12, bottom: 0 }}>
+            <defs>
+              <linearGradient id="gFood" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={COLORS.mint} stopOpacity={0.55} />
+                <stop offset="100%" stopColor={COLORS.emerald} stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="gRooms" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={COLORS.sky} stopOpacity={0.5} />
+                <stop offset="100%" stopColor={COLORS.blue} stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="sFood" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor={COLORS.emerald} />
+                <stop offset="100%" stopColor="#6ee7b7" />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={GRID} vertical={false} />
+            <XAxis
+              dataKey="date"
+              tick={{ fill: TICK, fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+              minTickGap={28}
+            />
+            <YAxis
+              tick={{ fill: TICK, fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(v) => (v >= 1000 ? `$${v / 1000}k` : `$${v}`)}
+            />
+            <Tooltip
+              content={<ChartTooltip prefix="$" />}
+              cursor={{ stroke: 'rgba(255,255,255,0.15)', strokeDasharray: '4 4' }}
+            />
+            <Area
+              type="monotone"
+              dataKey="Rooms"
+              stroke={COLORS.sky}
+              strokeWidth={2.5}
+              fill="url(#gRooms)"
+              dot={false}
+              activeDot={{ r: 5, strokeWidth: 2, stroke: '#0a1020' }}
+            />
+            <Area
+              type="monotone"
+              dataKey="Food"
+              stroke="url(#sFood)"
+              strokeWidth={3}
+              fill="url(#gFood)"
+              dot={false}
+              activeDot={{ r: 6, strokeWidth: 2, stroke: '#0a1020' }}
+            />
+          </AreaChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </GlassCard>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Reusable glowing donut                                             */
+/* ------------------------------------------------------------------ */
+export type DonutSlice = {
+  name: string;
+  value: number;
+  color: string;
+};
+
+export function GlowDonut({
+  data,
+  centerValue,
+  centerLabel,
+  idPrefix,
+  height = 150,
+  prefix = '',
+}: {
+  data: DonutSlice[];
+  centerValue: string;
+  centerLabel: string;
+  idPrefix: string;
+  height?: number;
+  prefix?: string;
+}) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  const hasData = total > 0;
+  const chartData: DonutSlice[] = hasData ? data.filter((d) => d.value > 0) : [{ name: 'Empty', value: 1, color: '#1e293b' }];
+
+  return (
+    <>
+      <div
+        className="relative w-full [&_.recharts-sector]:[filter:drop-shadow(0_0_10px_rgba(255,255,255,0.18))]"
+        style={{ height }}
+      >
+        <ResponsiveContainer>
+          <PieChart>
+            <defs>
+              {chartData.map((d, i) => (
+                <linearGradient key={i} id={`${idPrefix}-${i}`} x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor={d.color} />
+                  <stop offset="100%" stopColor={d.color} stopOpacity={0.45} />
+                </linearGradient>
+              ))}
+            </defs>
+            <Pie
+              data={chartData}
+              dataKey="value"
+              nameKey="name"
+              innerRadius="68%"
+              outerRadius="92%"
+              paddingAngle={hasData && chartData.length > 1 ? 5 : 0}
+              cornerRadius={10}
+              stroke="none"
+              startAngle={90}
+              endAngle={-270}
+            >
+              {chartData.map((d, i) => (
+                <Cell key={i} fill={hasData ? `url(#${idPrefix}-${i})` : d.color} />
+              ))}
+            </Pie>
+            {hasData && <Tooltip content={<ChartTooltip prefix={prefix} />} />}
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <p className="text-xl font-black text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.3)]">{centerValue}</p>
+          <p className="text-[11px] tracking-wide text-slate-500">{centerLabel}</p>
+        </div>
+      </div>
+
+      <ul className="mt-2 space-y-1">
+        {data.map((d) => {
+          const pct = total ? Math.round((d.value / total) * 100) : 0;
+          return (
+            <li key={d.name} className="flex items-center gap-2 text-xs">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: d.color, boxShadow: `0 0 10px ${d.color}` }} />
+              <span className="text-slate-300">{d.name}</span>
+              <span className="ml-auto font-semibold text-white">
+                {prefix}
+                {prefix === '$' ? d.value.toFixed(2) : d.value}
+              </span>
+              <span className="w-10 text-right text-xs text-slate-500">{pct}%</span>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Revenue split                                                      */
+/* ------------------------------------------------------------------ */
+export function RevenueSplitDonut({ food, rooms }: { food: number; rooms: number }) {
+  return (
+    <GlassCard title="Revenue Split" subtitle="Food vs Rooms" icon={PieIcon} accent={COLORS.violet} className="h-full">
+      <GlowDonut
+        idPrefix="split"
+        prefix="$"
+        centerValue={`$${(food + rooms).toFixed(0)}`}
+        centerLabel="Combined"
+        data={[
+          { name: 'Food', value: Math.round(food * 100) / 100, color: COLORS.emerald },
+          { name: 'Rooms', value: Math.round(rooms * 100) / 100, color: COLORS.sky },
+        ]}
+      />
+    </GlassCard>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Reservation status                                                 */
+/* ------------------------------------------------------------------ */
 const RES_COLORS: Record<string, string> = {
-  pending: '#f59e0b',
-  confirmed: '#10b981',
-  checked_in: '#38bdf8',
-  completed: '#94a3b8',
-  cancelled: '#fb7185',
-  no_show: '#f97316',
+  pending: COLORS.amber,
+  confirmed: COLORS.emerald,
+  checked_in: COLORS.sky,
+  completed: COLORS.slate,
+  cancelled: COLORS.rose,
+  no_show: COLORS.orange,
 };
 
 export function ReservationStatusDonut({
@@ -67,88 +233,30 @@ export function ReservationStatusDonut({
   total: number;
 }) {
   return (
-    <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 h-full">
-      <h2 className="text-lg font-bold text-white mb-1">Reservation Status</h2>
-      <p className="text-sm text-slate-500 mb-4">Where every room booking stands</p>
-
+    <GlassCard
+      title="Reservation Status"
+      subtitle="Where every room booking stands"
+      icon={CalendarCheck}
+      accent={COLORS.sky}
+      className="h-full"
+    >
       {!data.length ? (
-        <p className="text-slate-500 text-sm py-10 text-center">No reservations yet.</p>
+        <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-sky-400/30 bg-sky-400/10 text-sky-300 shadow-[0_0_30px_-6px_#38bdf8]">
+            <BedDouble size={24} />
+          </span>
+          <p className="text-sm text-slate-400">No reservations in this period.</p>
+          <p className="text-xs text-slate-600">New bookings will show up here.</p>
+        </div>
       ) : (
-        <div className="relative" style={{ width: '100%', height: 240 }}>
-          <ResponsiveContainer>
-            <PieChart>
-              <Pie data={data} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3}>
-                {data.map((d) => (
-                  <Cell key={d.key} fill={RES_COLORS[d.key] ?? '#64748b'} stroke="none" />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <p className="text-2xl font-black text-white">{total}</p>
-            <p className="text-xs text-slate-500 uppercase tracking-wider">Total</p>
-          </div>
-        </div>
+        <GlowDonut
+          idPrefix="res"
+          centerValue={String(total)}
+          centerLabel="Total"
+          data={data.map((d) => ({ name: d.name, value: d.value, color: RES_COLORS[d.key] ?? '#64748b' }))}
+        />
       )}
-
-      <ul className="mt-4 space-y-1.5">
-        {data.map((d) => (
-          <li key={d.key} className="flex items-center justify-between text-sm">
-            <span className="flex items-center gap-2 text-slate-300">
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: RES_COLORS[d.key] ?? '#64748b' }} />
-              {d.name}
-            </span>
-            <span className="text-slate-400">{d.value}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    </GlassCard>
   );
 }
 
-export function RevenueSplitDonut({ food, rooms }: { food: number; rooms: number }) {
-  const data = [
-    { name: 'Food', value: Math.round(food * 100) / 100 },
-    { name: 'Rooms', value: Math.round(rooms * 100) / 100 },
-  ];
-  const total = food + rooms;
-
-  return (
-    <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 h-full">
-      <h2 className="text-lg font-bold text-white mb-1">Revenue Split</h2>
-      <p className="text-sm text-slate-500 mb-4">Food vs Rooms</p>
-      <div className="relative" style={{ width: '100%', height: 220 }}>
-        <ResponsiveContainer>
-          <PieChart>
-            <Pie data={data} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={3}>
-              <Cell fill="#10b981" />
-              <Cell fill="#38bdf8" />
-            </Pie>
-            <Tooltip contentStyle={TOOLTIP_STYLE} />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <p className="text-xl font-black text-white">${total.toFixed(0)}</p>
-          <p className="text-xs text-slate-500 uppercase tracking-wider">Combined</p>
-        </div>
-      </div>
-      <ul className="mt-4 space-y-1.5">
-        <li className="flex items-center justify-between text-sm">
-          <span className="flex items-center gap-2 text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            Food
-          </span>
-          <span className="text-emerald-400 font-bold">${food.toFixed(2)}</span>
-        </li>
-        <li className="flex items-center justify-between text-sm">
-          <span className="flex items-center gap-2 text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-full bg-sky-400" />
-            Rooms
-          </span>
-          <span className="text-sky-400 font-bold">${rooms.toFixed(2)}</span>
-        </li>
-      </ul>
-    </div>
-  );
-}

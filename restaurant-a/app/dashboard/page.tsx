@@ -14,6 +14,15 @@ import {
 import DateRangeTabs from './components/DateRangeTabs';
 import StatCards from './components/StatCards';
 import { RevenueTrendChart, RevenueSplitDonut, ReservationStatusDonut } from './components/RevenueCharts';
+import {
+  BusyHoursChart,
+  CategoryDonut,
+  OrderStatusDonut,
+  RatingsCard,
+  TopSellers,
+  type RatingSummary,
+  type TopSeller,
+} from './components/InsightCharts';
 import RecentActivity from './components/RecentActivity';
 import MealsChart from './components/MealsChart';
 import { useMeals } from '../menu/hooks/useMeal';
@@ -24,6 +33,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [reservations, setReservations] = useState<any[]>([]);
+  const [topSellers, setTopSellers] = useState<TopSeller[]>([]);
+  const [ratings, setRatings] = useState<RatingSummary | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [range, setRange] = useState<RangeKey>('30d');
 
@@ -37,10 +48,15 @@ export default function DashboardPage() {
     Promise.all([
       fetch('/api/admin/orders').then((r) => r.json()),
       fetch('/api/reservations').then((r) => r.json()),
+      fetch('/api/admin/analytics').then((r) => r.json()).catch(() => null),
     ])
-      .then(([orderData, reservationData]) => {
+      .then(([orderData, reservationData, analytics]) => {
         if (orderData.success) setOrders(orderData.orders || []);
         setReservations(Array.isArray(reservationData) ? reservationData : []);
+        if (analytics?.success) {
+          setTopSellers(analytics.topSellers || []);
+          setRatings(analytics.ratings || null);
+        }
       })
       .catch(console.error)
       .finally(() => setLoadingData(false));
@@ -61,47 +77,79 @@ export default function DashboardPage() {
 
   if (status === 'loading' || loadingData) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-300">
-        <div className="w-12 h-12 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin mb-4" />
-        <p className="text-emerald-400 text-sm tracking-widest uppercase">Loading dashboard...</p>
+      <div className="flex min-h-[50vh] flex-col items-center justify-center text-slate-300">
+        <div className="relative mb-5 h-14 w-14">
+          <div className="absolute inset-0 animate-spin rounded-full border-4 border-emerald-500/20 border-t-emerald-400" />
+          <div className="absolute inset-2 animate-pulse rounded-full bg-emerald-400/20 blur-md" />
+        </div>
+        <p className="text-sm tracking-widest text-emerald-400">Loading dashboard...</p>
       </div>
     );
   }
 
   return (
     <div className="relative">
-      <header className="mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-4">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          Manager Dashboard
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400">
-          Restaurant &amp; Rooms Overview
-        </h1>
-        <p className="text-slate-400 mt-2">
-          Welcome back — here&apos;s what&apos;s happening across food orders and room reservations.
-        </p>
-      </header>
-
-      <DateRangeTabs value={range} onChange={setRange} />
-
-      <StatCards orders={filteredOrders} reservations={filteredReservations} />
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
-        <div className="xl:col-span-2">
-          <RevenueTrendChart data={trendData} />
-        </div>
-        <RevenueSplitDonut food={foodRevenue} rooms={roomRevenue} />
+      {/* ambient neon glow behind everything */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-24 -top-24 h-[360px] w-[360px] rounded-full bg-emerald-500/15 blur-[110px]" />
+        <div className="absolute right-0 top-40 h-[320px] w-[320px] rounded-full bg-sky-500/15 blur-[110px]" />
+        <div className="absolute bottom-20 left-1/3 h-[360px] w-[360px] rounded-full bg-violet-600/15 blur-[120px]" />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
-        <div className="xl:col-span-2 bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-4 sm:p-6">
-          <MealsChart meals={meals} category={category} loading={mealsLoading} />
-        </div>
-        <ReservationStatusDonut data={resStatusData} total={filteredReservations.length} />
-      </div>
+      <div className="relative z-10">
+        <header className="mb-3">
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-300 shadow-[0_0_24px_-6px_#34d399]">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+            Manager Dashboard
+          </div>
+          <h1 className="bg-gradient-to-r from-white via-emerald-100 to-sky-300 bg-clip-text text-2xl font-black text-transparent sm:text-3xl">
+            Restaurant &amp; Rooms Overview
+          </h1>
+          <p className="mt-1 text-sm text-slate-400">
+            Welcome back — here&apos;s what&apos;s happening across food orders and room reservations.
+          </p>
+        </header>
 
-      <RecentActivity orders={filteredOrders} reservations={filteredReservations} />
+        <DateRangeTabs value={range} onChange={setRange} />
+
+        <StatCards orders={filteredOrders} reservations={filteredReservations} trendData={trendData} />
+
+        {/* Row A: revenue trend + split */}
+        <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-4">
+          <div className="xl:col-span-3">
+            <RevenueTrendChart data={trendData} />
+          </div>
+          <RevenueSplitDonut food={foodRevenue} rooms={roomRevenue} />
+        </div>
+
+        {/* Row B: meals + reservation status + order status */}
+        <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="md:col-span-2">
+            <MealsChart meals={meals} category={category} loading={mealsLoading} />
+          </div>
+          <ReservationStatusDonut data={resStatusData} total={filteredReservations.length} />
+          <OrderStatusDonut orders={filteredOrders} />
+        </div>
+
+        {/* Row C: busy times + categories + ratings */}
+        <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="md:col-span-2">
+            <BusyHoursChart orders={filteredOrders} />
+          </div>
+          <CategoryDonut meals={meals} />
+          <RatingsCard ratings={ratings} />
+        </div>
+
+        {/* Row D: top sellers + recent activity */}
+        <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-4">
+          <div className="xl:col-span-2">
+            <TopSellers items={topSellers} />
+          </div>
+          <div className="xl:col-span-2">
+            <RecentActivity orders={filteredOrders} reservations={filteredReservations} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
